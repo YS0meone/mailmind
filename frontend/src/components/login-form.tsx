@@ -21,14 +21,15 @@ export function LoginForm({
     
     // Your application client ID from Aurinko
     const appClientId = process.env.NEXT_PUBLIC_AURINKO_CLIENT_ID || "";
-    
+    console.log(appClientId);
+    // alert(window.location.origin + "/auth/callback");
     // Define required parameters
     const params = new URLSearchParams({
       clientId: appClientId,
       serviceType: "Google",
       scopes: "Mail.Read Mail.Send",
       responseType: "code",
-      returnUrl: window.location.origin + "/auth/callback", // Adjust to your callback route
+      returnUrl: "http://localhost:8000/auth/callback", // Adjust to your callback route
       state: JSON.stringify({ source: "google_login", timestamp: Date.now() }) // Custom state for verification
     });
     

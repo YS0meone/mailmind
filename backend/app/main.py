@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Query
-from api.main import api_router
+from app.api.main import api_router
 from typing import Annotated
 
 app = FastAPI()

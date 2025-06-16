@@ -1,22 +1,10 @@
 from fastapi import FastAPI, Query
-from pydantic import BaseModel
+from api.main import api_router
 from typing import Annotated
 
 app = FastAPI()
 
-class AuthParam(BaseModel):
-    code: str
-    state: str
-    status: str
+app.include_router(api_router)
 
-@app.get("/")
-async def root():
-    return {"message": "hello world" }
-
-@app.get("/auth/redirect")
-async def aurinko_redirect(auth_param: Annotated[AuthParam, Query()]):
-    print("redirect visited")
-    print(auth_param)
-    return {"message": "redirect visited"}
 
 

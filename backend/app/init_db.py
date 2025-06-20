@@ -1,20 +1,26 @@
-from .logger_config import get_logger
-from .core.db import init_db
 import asyncio
+from urllib.parse import urlparse
+from sqlalchemy.ext.asyncio import create_async_engine
+from app.core.config import settings
+from app.models import Base
 
-loggerr = get_logger(__name__)
+tmpPostgres = urlparse(settings.DATABASE_URL)
 
-async def main():
-    """
-    Initializes the database and logs the completion of the initialization.
-    """
-    loggerr.info("Initializing database...")
+async def async_main() -> None:
+    engine = create_async_engine(f"postgresql+asyncpg://{tmpPostgres.username}:{tmpPostgres.password}@{tmpPostgres.hostname}{tmpPostgres.path}?ssl=require", echo=True)
+    
     try:
-        await init_db()
+        async with engine.begin() as conn:  # Use begin() instead of connect() for auto-commit
+            # ✅ ADD THIS: Create all tables
+            await conn.run_sync(Base.metadata.drop_all) 
+            await conn.run_sync(Base.metadata.create_all)
+            print("✅ Database tables created successfully!")
+            
     except Exception as e:
-        loggerr.error("Failed to initialize database: %s", e)
-        raise e
-    loggerr.info("Database initialized successfully.")
+        print(f"❌ Error creating tables: {e}")
+        raise
+    finally:
+        await engine.dispose()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(async_main())

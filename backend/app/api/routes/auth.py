@@ -154,6 +154,27 @@ async def increment_sync_updated(delta_token: str, access_token: str, records: l
         raise HTTPException(
             status_code=500, detail="Failed to increment sync updated count due to request error")
 
+async def get_user_email_by_id(account_id: str) -> str | None:
+    logger.info("Fetching user email for account ID: %s", account_id)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{settings.AURINKO_BASE_URL}/am/accounts/{account_id}",
+                auth=(settings.AURINKO_CLIENT_ID, settings.AURINKO_CLIENT_SECRET)
+            )
+            response.raise_for_status()
+            user_data = response.json()
+            return user_data.get("email")
+        except httpx.HTTPStatusError as e:  
+            logger.error("HTTP error %s - %s", e.response.status_code, e.response.text)
+            raise HTTPException(status_code=e.response.status_code,
+                                detail="Failed to get user email due to HTTP error")
+        except httpx.RequestError as e:
+            logger.error("Request failed: %s", e)
+            raise HTTPException(
+                status_code=500, detail="Failed to get user email due to request error")
+    
+
 @router.get("/callback")
 async def aurinko_final_callback(code: str, state: str, session: SessionDep):
     """
@@ -172,9 +193,17 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep):
     # Exchange the code for a token
     token_data = await exchangeCodeForToken(code)
     
+    # get user email
+    user_email = await get_user_email_by_id(token_data.get("accountId"))
+    logger.info("User email fetched: %s", user_email)
+    if not user_email:
+        logger.error("Failed to fetch user email for account ID: %s", token_data.get("accountId"))
+        raise HTTPException(status_code=500, detail="Failed to fetch user email")
+
     user_model = User(
         account_id = token_data.get("accountId"),
         account_token= token_data.get("accessToken"),
+        email=user_email,
     )
     # create new user or update existing user in the database
     new_user = await upsert_user(session=session, user=user_model)
@@ -190,7 +219,7 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep):
     access_token = create_access_token(new_user.account_id, expire_minutes)
     logger.info("Generated access token for user %s", new_user.account_id)
 
-    redirect_url = f"{settings.FRONTEND_URL}/dashboard"
+    redirect_url = f"{settings.FRONTEND_URL}/inbox"
     
     # setup background job to sync emails
     
@@ -209,8 +238,13 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep):
         records=records
     )
     logger.info("Last delta token after sync: %s", last_delta_token)
-    print("-" * 20)
-    print(records[0])
+
+    # update the user with the last delta token
+    user_model.last_delta_token = last_delta_token
+    updated_user = await upsert_user(session=session, user=user_model)
+    logger.info("User %s updated with last delta token: %s", updated_user.account_id, updated_user.last_delta_token)
+
+
     # set http-only cookie with the access token
     response = RedirectResponse(url=redirect_url, status_code=307) 
     response.set_cookie(

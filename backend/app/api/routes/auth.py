@@ -1,3 +1,4 @@
+from asyncio import sleep
 from datetime import timedelta
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
@@ -10,7 +11,7 @@ from app.api.dep import SessionDep
 from app.models import DbUser, User
 from sqlalchemy import insert
 from app.crud import upsert_user
-from app.core.security import generate_access_token
+from app.core.security import create_access_token
 
 
 logger = get_logger(__name__)
@@ -53,8 +54,105 @@ async def exchangeCodeForToken(code: str) -> dict | None:
         raise HTTPException(
             status_code=500, detail="Failed to exchange code for token due to request error")   
 
-   
-    
+
+async def init_sync_emails(user: DbUser):
+    logger.info("Syncing emails for user %s", user.account_id)
+
+    sync_url = f"{settings.AURINKO_BASE_URL}/email/sync"
+    init_succeeded = False
+    retry = 5
+    try:
+        async with httpx.AsyncClient() as client:
+            while not init_succeeded and retry > 0:
+                logger.info("Starting email sync for user %s", user.account_id)
+                # Send a POST request to start the sync
+                response = await client.post(
+                    sync_url,
+                    headers={
+                        "Authorization": f"Bearer {user.account_token}",
+                    },
+                    params={
+                        "daysWithin": 30
+                    }
+                )
+                response.raise_for_status()
+                # we check if the response has a field called ready that is true
+                if response.json().get("ready", False):
+                    init_succeeded = True
+                    logger.info("Email sync initialization for user %s completed successfully", user.account_id)
+                else:
+                    logger.info("Email sync initialization for user %s is still in progress, waiting...", user.account_id)
+                    # wait for 1 second before checking again
+                    await sleep(1)
+                    retry -= 1
+            return response.json()
+    except httpx.HTTPStatusError as e:  
+        logger.error("HTTP error %s - %s", e.response.status_code, e.response.text)
+        raise HTTPException(status_code=e.response.status_code,
+                            detail="Failed to exchange code for token due to HTTP error")
+    except httpx.RequestError as e:
+        logger.error("Request failed: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to exchange code for token due to request error") 
+
+async def increment_sync_updated(delta_token: str, access_token: str, records: list[any]) -> str: 
+    logger.info("sync updated email incrementally for token: %s", delta_token)
+    increment_url = f"{settings.AURINKO_BASE_URL}/email/sync/updated"
+    prev_delta_token = delta_token
+    page_token = None
+    try:
+        async with httpx.AsyncClient() as client:
+            while delta_token:
+                response = await client.get(
+                    increment_url,
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                    },
+                    params={
+                        "deltaToken": delta_token
+                    }
+                )
+                response.raise_for_status()
+                logger.info("response received with delta token: %s", delta_token)
+                data = response.json()
+
+                page_token = data.get("nextPageToken")
+                logger.info("next delta token: %s, next page token: %s", delta_token, page_token)
+                records.extend(data.get("records", []))
+                logger.info("Fetched %d records", len(data.get("records", [])))
+
+                while delta_token == prev_delta_token and page_token:
+                    logger.info("Fetching next page of emails with page token: %s", page_token)
+                    response = await client.get(
+                        f"{settings.AURINKO_BASE_URL}/email/sync/updated",
+                        headers={
+                            "Authorization": f"Bearer {access_token}",
+                        },
+                        params={"pageToken": page_token}
+                    )
+                    response.raise_for_status()
+
+                    data = response.json()
+                    page_token = data.get("nextPageToken")
+                    logger.info("next page token: %s", page_token)
+                    records.extend(data.get("records", []))
+                    logger.info("Fetched %d records", len(data.get("records", [])))
+                    prev_delta_token = delta_token
+                    delta_token = data.get("nextDeltaToken")
+                    logger.info("next delta token: %s", delta_token)
+
+                logger.info("Updated email for delta token %s completed with %d records", prev_delta_token, len(records))
+            logger.info("All emails synced successfully for user")        
+            return prev_delta_token
+        
+    except httpx.HTTPStatusError as e:  
+        logger.error("HTTP error %s - %s", e.response.status_code, e.response.text)
+        raise HTTPException(status_code=e.response.status_code,
+                            detail="Failed to increment sync updated count due to HTTP error")
+    except httpx.RequestError as e:
+        logger.error("Request failed: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to increment sync updated count due to request error")
 
 @router.get("/callback")
 async def aurinko_final_callback(code: str, state: str, session: SessionDep):
@@ -89,10 +187,30 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep):
 
     # return an access token and redirect to the frontend
     expire_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = generate_access_token(new_user.account_id, expire_minutes)
+    access_token = create_access_token(new_user.account_id, expire_minutes)
     logger.info("Generated access token for user %s", new_user.account_id)
 
     redirect_url = f"{settings.FRONTEND_URL}/dashboard"
+    
+    # setup background job to sync emails
+    
+    token_response = await init_sync_emails(new_user)
+    logger.info("Email sync response: %s", token_response)
+
+    if not token_response.get("ready"):
+        logger.error("Email sync initialization failed for user %s", new_user.account_id)
+        raise HTTPException(status_code=500, detail="Email sync initialization failed")
+    
+    records = []
+    # increment sync emails updated
+    last_delta_token = await increment_sync_updated(
+        delta_token=token_response.get("syncUpdatedToken"),
+        access_token=new_user.account_token,
+        records=records
+    )
+    logger.info("Last delta token after sync: %s", last_delta_token)
+    print("-" * 20)
+    print(records[0])
     # set http-only cookie with the access token
     response = RedirectResponse(url=redirect_url, status_code=307) 
     response.set_cookie(
@@ -104,7 +222,7 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep):
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     )
 
-    return {"message": "test insert user"}
+    return response
 
     
 

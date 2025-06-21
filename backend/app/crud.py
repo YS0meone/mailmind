@@ -12,9 +12,9 @@ async def upsert_user(*, session: AsyncSession, user: User) -> DbUser | None:
     db_user = result.scalar_one_or_none()
     if db_user:
         # if user exists, update the existing user
-        db_user.account_id = user.account_id
-        db_user.account_token = user.account_token
-        db_user.last_delta_token = user.last_delta_token
+        db_user.accountId = user.accountId
+        db_user.accountToken = user.accountToken
+        db_user.lastDeltaToken = user.lastDeltaToken
         await session.commit()
         await session.refresh(db_user)
         logger.info(f"Updated existing user: {db_user}")
@@ -22,10 +22,10 @@ async def upsert_user(*, session: AsyncSession, user: User) -> DbUser | None:
         return db_user
     else:
         new_user = DbUser(
-            account_id=user.account_id,
-            account_token=user.account_token,
+            accountId=user.accountId,
+            accountToken=user.accountToken,
             email=user.email,
-            last_delta_token=user.last_delta_token
+            lastDeltaToken=user.lastDeltaToken
         )
         session.add(new_user)
         await session.commit()

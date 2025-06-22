@@ -10,11 +10,12 @@ from app.logger_config import get_logger
 from app.api.dep import SessionDep
 from app.models import DbUser, User
 from sqlalchemy import insert
-from app.crud import upsert_user
+from app.crud import upsert_user, sync_emails_and_threads
 from app.core.security import create_access_token
 from app.core.db import AsyncSessionLocal, engine
-import json
-from pathlib import Path
+# import json
+# from pathlib import Path
+
 
 logger = get_logger(__name__)
 
@@ -209,10 +210,14 @@ async def sync_emails(user: User):
         updated_user = await upsert_user(session=session, user=user)
         logger.info("User %s updated with last delta token: %s", updated_user.accountId, updated_user.lastDeltaToken)
         
-        # load all email records into a json file
-        with open(Path(__file__).parent / "emails.json", "w") as f:
-            json.dump(records, f, indent=4)
-            logger.info("Saved %d email records to emails.json", len(records))
+        # # load all email records into a json file
+        # with open(Path(__file__).parent / "emails.json", "w") as f:
+        #     json.dump(records, f, indent=4)
+        #     logger.info("Saved %d email records to emails.json", len(records))
+        # sync emails and threads
+        await sync_emails_and_threads(session,records)
+        
+
 
 # async def insert_all_email_records(records: list[dict]):
 #     if not records:

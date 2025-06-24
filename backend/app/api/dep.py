@@ -1,3 +1,4 @@
+from fastapi.security import HTTPBearer
 from app.core.db import AsyncSessionLocal
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, HTTPException, Request
@@ -24,18 +25,25 @@ async def get_db():
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
+security = HTTPBearer(auto_error=False)
+
 # get user email from the jwt token sent from the frontend
 async def verify_user_email(
-    request: Request
+    request: Request,
+    token: str = Depends(security)
 ) -> str:
     """
     Verify user email from the JWT token in the request.
     """
-    token = request.headers.get("Authorization")
-    if not token:
+    if token:
+        token_str = token.credentials
+    else:
+        token_str = request.cookies.get("access_token")
+
+    if not token_str:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        return decode_jwt_token(token.split(" ")[1])
+        return decode_jwt_token(token_str)
     except Exception as e:
         logger.error(f"Error verifying user email: {e}")
         raise HTTPException(status_code=401, detail="Invalid token") from e

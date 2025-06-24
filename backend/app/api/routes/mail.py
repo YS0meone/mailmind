@@ -8,7 +8,7 @@ import httpx
 from fastapi.exceptions import HTTPException
 from app.logger_config import get_logger
 from app.api.dep import SessionDep, TokenDep
-from app.models import DbUser, User, Thread, DbThread
+from app.models import Thread, DbThread, DbEmail, Email
 from sqlalchemy import insert, select, func
 from app.crud import upsert_user, sync_emails_and_threads
 from app.core.security import create_access_token
@@ -20,6 +20,30 @@ router = APIRouter(
     prefix="/mail",
     tags=["mail"]
 )
+
+'''
+Test with:
+curl -X GET "http://localhost:8000/mail/threads/<thread_id>/messages" \
+   -H "Authorization: Bearer <token>"
+'''
+# get the email messsages associated with a thread
+@router.get("/threads/{thread_id}/messages", response_model=list[Email])
+async def get_thread_messages(thread_id: str, session: SessionDep, _: TokenDep):
+    """
+    Get all messages in a thread.
+    """
+    # select all messages in the thread where the user is involved
+    query = select(DbEmail).where(
+        DbThread.id == thread_id,
+    )
+    results = await session.execute(query)
+    emails = results.scalars().all()
+    
+    if not emails:
+        raise HTTPException(status_code=404, detail="Thread not found or you are not involved in this thread.")
+    
+    return emails
+
 
 '''
 Test with:
@@ -75,3 +99,4 @@ async def get_thread_counts(status: str, session: SessionDep, user_email: TokenD
     results = await session.execute(query)
     count = results.scalar_one()
     return {"count": count}
+

@@ -1,6 +1,7 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
+import useSWR from "swr";
 import {
   AlertCircle,
   Archive,
@@ -13,51 +14,76 @@ import {
   ShoppingCart,
   Trash2,
   Users2,
-} from "lucide-react"
+} from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "@/components/ui/resizable"
-import { Separator } from "@/components/ui/separator"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs"
-import { TooltipProvider } from "@/components/ui/tooltip"
-import { AccountSwitcher } from "@/components/account-switcher"
-import { MailDisplay } from "@/components/mail-display"
-import { MailList } from "@/components/mail-list"
-import { Nav } from "@/components/nav"
-import { type Mail } from "@/components/data"
-import { useMail } from "@/components/use-mail"
+} from "@/components/ui/resizable";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { MailDisplay } from "@/components/mail-display";
+import { MailList } from "@/components/mail-list";
+import { Nav } from "@/components/nav";
+import { Mail, DbEmail, Thread } from "@/types";
+import { convertDbEmailsToMails } from "@/lib/utils";
+
+const fetcher = (url: string) =>
+  fetch(url, {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    
+  }).then((res) => res.json());
 
 interface MailProps {
-  accounts: {
-    label: string
-    email: string
-    icon: React.ReactNode
-  }[]
-  mails: Mail[]
-  defaultLayout: number[] | undefined
-  defaultCollapsed?: boolean
-  navCollapsedSize: number
+  defaultLayout: number[] | undefined;
+  defaultCollapsed?: boolean;
+  navCollapsedSize: number;
 }
 
-export function Mail({
-  accounts,
-  mails,
+export function MailPage({
   defaultLayout = [20, 32, 48],
   defaultCollapsed = false,
   navCollapsedSize,
 }: MailProps) {
-  const [isCollapsed, setIsCollapsed] = React.useState(defaultCollapsed)
-  const [mail] = useMail()
+  const [isCollapsed, setIsCollapsed] = React.useState(defaultCollapsed);
+  const [selecteId, setSelectedId] = React.useState("");
+
+  function handleClick(id: string): void{
+    setSelectedId(id);
+  }
+
+  const params = new URLSearchParams({
+    "page": "1",
+    "limit": "20",
+  });
+  let {
+    data: fetchedThreads,
+    error,
+    isLoading,
+  } = useSWR<Thread[]>(`http://localhost:8000/mail/threads?${params.toString()}`, fetcher);
+
+  const threads = fetchedThreads ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">Loading...</div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        Error loading threads
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -66,7 +92,7 @@ export function Mail({
         onLayout={(sizes: number[]) => {
           document.cookie = `react-resizable-panels:layout:mail=${JSON.stringify(
             sizes
-          )}`
+          )}`;
         }}
         className="h-full max-h-[800px] items-stretch"
       >
@@ -77,16 +103,16 @@ export function Mail({
           minSize={15}
           maxSize={20}
           onCollapse={() => {
-            setIsCollapsed(true)
+            setIsCollapsed(true);
             document.cookie = `react-resizable-panels:collapsed=${JSON.stringify(
               true
-            )}`
+            )}`;
           }}
           onResize={() => {
-            setIsCollapsed(false)
+            setIsCollapsed(false);
             document.cookie = `react-resizable-panels:collapsed=${JSON.stringify(
               false
-            )}`
+            )}`;
           }}
           className={cn(
             isCollapsed &&
@@ -99,7 +125,7 @@ export function Mail({
               isCollapsed ? "h-[52px]" : "px-2"
             )}
           >
-            <AccountSwitcher isCollapsed={isCollapsed} accounts={accounts} />
+            {/* <AccountSwitcher isCollapsed={isCollapsed} /> */}
           </div>
           <Separator />
           <Nav
@@ -123,62 +149,9 @@ export function Mail({
                 icon: Send,
                 variant: "ghost",
               },
-              {
-                title: "Junk",
-                label: "23",
-                icon: ArchiveX,
-                variant: "ghost",
-              },
-              {
-                title: "Trash",
-                label: "",
-                icon: Trash2,
-                variant: "ghost",
-              },
-              {
-                title: "Archive",
-                label: "",
-                icon: Archive,
-                variant: "ghost",
-              },
             ]}
           />
           <Separator />
-          <Nav
-            isCollapsed={isCollapsed}
-            links={[
-              {
-                title: "Social",
-                label: "972",
-                icon: Users2,
-                variant: "ghost",
-              },
-              {
-                title: "Updates",
-                label: "342",
-                icon: AlertCircle,
-                variant: "ghost",
-              },
-              {
-                title: "Forums",
-                label: "128",
-                icon: MessagesSquare,
-                variant: "ghost",
-              },
-              {
-                title: "Shopping",
-                label: "8",
-                icon: ShoppingCart,
-                variant: "ghost",
-              },
-              {
-                title: "Promotions",
-                label: "21",
-                icon: Archive,
-                variant: "ghost",
-              },
-            ]}
-          />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={defaultLayout[1]} minSize={30}>
@@ -210,20 +183,20 @@ export function Mail({
               </form>
             </div>
             <TabsContent value="all" className="m-0">
-              <MailList items={mails} />
+              <MailList items={threads} selectedId={selecteId} handleClick={handleClick}/>
             </TabsContent>
-            <TabsContent value="unread" className="m-0">
+            {/* <TabsContent value="unread" className="m-0">
               <MailList items={mails.filter((item) => !item.read)} />
-            </TabsContent>
+            </TabsContent> */}
           </Tabs>
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={defaultLayout[2]} minSize={30}>
-          <MailDisplay
-            mail={mails.find((item) => item.id === mail.selected) || null}
-          />
+          {/* <MailDisplay
+            mail={mails.find((item) => item.id === selecteId) || null}
+          /> */}
         </ResizablePanel>
       </ResizablePanelGroup>
     </TooltipProvider>
-  )
+  );
 }

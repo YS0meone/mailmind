@@ -17,6 +17,7 @@ def setup_logging():
         "watchfiles.main": logging.WARNING,
         "uvicorn.error": logging.INFO,
         "uvicorn.access": logging.INFO,
+        "sqlalchemy.engine": logging.WARNING,
     }
     for logger_name, level in logger_config.items():
         logging.getLogger(logger_name).setLevel(level)

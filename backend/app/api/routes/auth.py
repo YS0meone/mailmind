@@ -189,20 +189,26 @@ async def sync_emails(user: User):
             raise HTTPException(status_code=500, detail="Failed to create or update user in the database")
 
         logger.info("User %s created or updated successfully", new_user.accountId)
-    
-        token_response = await init_sync_emails(new_user)
-        logger.info("Email sync response: %s", token_response)
+        
+        current_delta_token = new_user.lastDeltaToken
 
-        if not token_response.get("ready"):
-            logger.error("Email sync initialization failed for user %s", new_user.accountId)
-            raise HTTPException(status_code=500, detail="Email sync initialization failed")
+        if not current_delta_token:
+            token_response = await init_sync_emails(new_user)
+            logger.info("Email sync response: %s", token_response)
+
+            if not token_response.get("ready"):
+                logger.error("Email sync initialization failed for user %s", new_user.accountId)
+                raise HTTPException(status_code=500, detail="Email sync initialization failed")
+            current_delta_token = token_response.get("syncUpdatedToken")
+            logger.info("Current delta token after initialization: %s", current_delta_token)
         
         # increment sync emails updated
         lastDeltaToken = await increment_sync_updated(
-            delta_token=token_response.get("syncUpdatedToken"),
+            delta_token=current_delta_token,
             access_token=new_user.accountToken,
             records=records
         )
+
         logger.info("Last delta token after sync: %s", lastDeltaToken)
 
         # update the user with the last delta token
@@ -266,8 +272,8 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
     
     # return an access token and redirect to the frontend
     expire_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(user.accountId, expire_minutes)
-    logger.info("Generated access token for user %s", user.accountId)
+    access_token = create_access_token(user.email, expire_minutes)
+    logger.info("Generated access token for user %s: %s", user.accountId, access_token)
 
     redirect_url = f"{settings.FRONTEND_URL}/inbox"
     
@@ -284,5 +290,6 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
 
     return response
 
-    
+
+
 

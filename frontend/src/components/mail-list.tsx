@@ -14,8 +14,15 @@ interface MailListProps {
 }
 
 export function MailList({ items, selectedId, handleClick }: MailListProps) {
+  if (items.length === 0) {
+    return (
+      <div className="flex h-screen items-center justify-center p-4">
+        <div className="text-muted-foreground">No emails found</div>
+      </div>
+    )
+  }
   return (
-    <ScrollArea className="h-screen">
+    <ScrollArea className="h-full">
       <div className="flex flex-col gap-2 p-4 pt-0">
         {items.map((item) => (
           <button

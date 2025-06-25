@@ -94,7 +94,7 @@ export function MailPage({
             sizes
           )}`;
         }}
-        className="h-full max-h-[800px] items-stretch"
+        className="h-full max-h-screen items-stretch"
       >
         <ResizablePanel
           defaultSize={defaultLayout[0]}
@@ -155,8 +155,8 @@ export function MailPage({
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={defaultLayout[1]} minSize={30}>
-          <Tabs defaultValue="all">
-            <div className="flex items-center px-4 py-2">
+          <Tabs defaultValue="all" className="flex flex-col h-full">
+            <div className="flex items-center px-4 py-2 flex-shrink-0">
               <h1 className="text-xl font-bold">Inbox</h1>
               <TabsList className="ml-auto">
                 <TabsTrigger
@@ -166,15 +166,15 @@ export function MailPage({
                   All mail
                 </TabsTrigger>
                 <TabsTrigger
-                  value="unread"
+                  value="done"
                   className="text-zinc-600 dark:text-zinc-200"
                 >
-                  Unread
+                  Done
                 </TabsTrigger>
               </TabsList>
             </div>
             <Separator />
-            <div className="bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
               <form>
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -182,12 +182,12 @@ export function MailPage({
                 </div>
               </form>
             </div>
-            <TabsContent value="all" className="m-0">
+            <TabsContent value="all" className="m-0 flex-1 overflow-hidden flex flex-col">
               <MailList items={threads} selectedId={selecteId} handleClick={handleClick}/>
             </TabsContent>
-            {/* <TabsContent value="unread" className="m-0">
-              <MailList items={mails.filter((item) => !item.read)} />
-            </TabsContent> */}
+            <TabsContent value="done" className="m-0 flex-1 overflow-hidden flex flex-col">
+              <MailList items={threads.filter((item) => item.done)} selectedId={selecteId} handleClick={handleClick}/>
+            </TabsContent>
           </Tabs>
         </ResizablePanel>
         <ResizableHandle withHandle />

@@ -1,19 +1,19 @@
 export interface DbAddress {
-  id: string;
+  id: number;
   address: string;
   name?: string;
 }
 
 export interface DbEmail {
-  id: string;
-  threadId: string;
+  id: number;
+  threadId: number;
   createdTime: string;
   lastModifiedTime?: string;
   sentAt: string;
   receivedAt: string;
   subject: string;
   labels: string[];
-  fromId: string;
+  fromId: number;
   body?: string;
   inReplyTo?: string;
   emailLabel: string;
@@ -37,7 +37,7 @@ export interface Mail {
 }
 
 export interface Thread {
-  id: string;
+  id: number;
   subject: string;
   lastMessageDate: string;
   brief: string;

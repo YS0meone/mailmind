@@ -9,8 +9,8 @@ import { Thread } from "@/types";
 
 interface MailListProps {
   items: Thread[];
-  selectedId: string;
-  handleClick: (id: string) => void;
+  selectedId: number;
+  handleClick: (id: number) => void;
 }
 
 export function MailList({ items, selectedId, handleClick }: MailListProps) {

@@ -38,7 +38,6 @@ const fetcher = (url: string) =>
     headers: {
       "Content-Type": "application/json",
     },
-    
   }).then((res) => res.json());
 
 interface MailProps {
@@ -53,21 +52,24 @@ export function MailPage({
   navCollapsedSize,
 }: MailProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(defaultCollapsed);
-  const [selecteId, setSelectedId] = React.useState("");
+  const [selecteId, setSelectedId] = React.useState(0);
 
-  function handleClick(id: string): void{
+  function handleClick(id: number): void {
     setSelectedId(id);
   }
 
   const params = new URLSearchParams({
-    "page": "1",
-    "limit": "20",
+    page: "1",
+    limit: "20",
   });
   let {
     data: fetchedThreads,
     error,
     isLoading,
-  } = useSWR<Thread[]>(`http://localhost:8000/mail/threads?${params.toString()}`, fetcher);
+  } = useSWR<Thread[]>(
+    `http://localhost:8000/mail/threads?${params.toString()}`,
+    fetcher
+  );
 
   const threads = fetchedThreads ?? [];
 
@@ -182,19 +184,35 @@ export function MailPage({
                 </div>
               </form>
             </div>
-            <TabsContent value="all" className="m-0 flex-1 overflow-hidden flex flex-col">
-              <MailList items={threads} selectedId={selecteId} handleClick={handleClick}/>
+            <TabsContent
+              value="all"
+              className="m-0 flex-1 overflow-hidden flex flex-col"
+            >
+              <MailList
+                items={threads}
+                selectedId={selecteId}
+                handleClick={handleClick}
+              />
             </TabsContent>
-            <TabsContent value="done" className="m-0 flex-1 overflow-hidden flex flex-col">
-              <MailList items={threads.filter((item) => item.done)} selectedId={selecteId} handleClick={handleClick}/>
+            <TabsContent
+              value="done"
+              className="m-0 flex-1 overflow-hidden flex flex-col"
+            >
+              <MailList
+                items={threads.filter((item) => item.done)}
+                selectedId={selecteId}
+                handleClick={handleClick}
+              />
             </TabsContent>
           </Tabs>
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={defaultLayout[2]} minSize={30}>
-          {/* <MailDisplay
-            mail={mails.find((item) => item.id === selecteId) || null}
-          /> */}
+          <MailDisplay
+            thread={
+              threads.find((item) => item.id === selecteId) || null
+            }
+          />
         </ResizablePanel>
       </ResizablePanelGroup>
     </TooltipProvider>

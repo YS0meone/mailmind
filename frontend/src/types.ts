@@ -1,3 +1,9 @@
+export interface DbAddress {
+  id: string;
+  address: string;
+  name?: string;
+}
+
 export interface DbEmail {
   id: string;
   threadId: string;
@@ -5,31 +11,18 @@ export interface DbEmail {
   lastModifiedTime?: string;
   sentAt: string;
   receivedAt: string;
-  internetMessageId: string;
   subject: string;
-  sysLabels: string[];
-  keywords: string[];
-  sysClassifications: string[];
-  sensitivity: string;
-  meetingMessageMethod?: string;
-  fromAddr: string;
-  toAddrs: string[];
-  ccAddrs: string[];
-  bccAddrs: string[];
-  replyToAddrs: string[];
-  hasAttachments: boolean;
+  labels: string[];
+  fromId: string;
   body?: string;
-  bodySnippet?: string;
   inReplyTo?: string;
-  attachments: Array<Record<string, any>>;
-  references?: string;
-  threadIndex?: string;
-  internetHeaders: Array<Record<string, any>>;
-  nativeProperties?: Record<string, any>;
-  folderId?: string;
-  weblink?: string;
-  omitted: string[];
   emailLabel: string;
+  threadIndex?: string;
+  from_address: DbAddress;
+  to_addresses: DbAddress[];
+  cc_addresses: DbAddress[];
+  bcc_addresses: DbAddress[];
+  reply_to_addresses: DbAddress[];
 }
 
 export interface Mail {
@@ -47,9 +40,10 @@ export interface Thread {
   id: string;
   subject: string;
   lastMessageDate: string;
-  involvedEmails: string[];
+  brief: string;
   done: boolean;
   inboxStatus: boolean;
   draftStatus: boolean;
   sentStatus: boolean;
+  emails: DbEmail[];
 }

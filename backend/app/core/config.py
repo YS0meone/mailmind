@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     AURINKO_CLIENT_ID : str
     AURINKO_CLIENT_SECRET : str
     AURINKO_BASE_URL: str
+    AURINKO_SYNC_DAYS_WITHIN : int = 3
 
     # application urls
     FRONTEND_URL : str = "http://localhost:3000"

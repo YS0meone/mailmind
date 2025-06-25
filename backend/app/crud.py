@@ -1,7 +1,9 @@
-from sqlalchemy import select
+import httpx
+from app.core.config import settings
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
-from app.models import User, DbUser
+from app.models import User, DbUser, DbEmailAddress, EmailLabel
 from app.logger_config import get_logger
 from app.models import DbEmail, DbThread, Email
 from sqlalchemy import select
@@ -11,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert
 from datetime import datetime
 
 logger = get_logger(__name__)
+
 
 async def upsert_user(*, session: AsyncSession, user: User) -> DbUser | None:
     # check if the user with given email exists
@@ -25,7 +28,7 @@ async def upsert_user(*, session: AsyncSession, user: User) -> DbUser | None:
         await session.commit()
         await session.refresh(db_user)
         logger.info(f"Updated existing user: {db_user}")
-         # Return the updated user
+        # Return the updated user
         return db_user
     else:
         new_user = DbUser(
@@ -38,146 +41,198 @@ async def upsert_user(*, session: AsyncSession, user: User) -> DbUser | None:
         await session.commit()
         await session.refresh(new_user)
         logger.info(f"Inserted new user: {new_user}")
-         # Return the newly created user
+        # Return the newly created user
         return new_user
 
-def convert_to_email(email: dict) -> Email:
-    email_dict = email.copy()
-    
-    # Convert address fields
-    email_dict['toAddrs'] = [addr["address"] for addr in email_dict.get('to', [])]
-    if 'to' in email_dict:
-        del email_dict['to']
-        
-    email_dict['ccAddrs'] = [addr["address"] for addr in email_dict.get('cc', [])]
-    if 'cc' in email_dict:
-        del email_dict['cc']
-        
-    email_dict['bccAddrs'] = [addr["address"] for addr in email_dict.get('bcc', [])]
-    if 'bcc' in email_dict:
-        del email_dict['bcc']
-        
-    email_dict['replyToAddrs'] = [addr["address"] for addr in email_dict.get('replyTo', [])]
-    if 'replyTo' in email_dict:
-        del email_dict['replyTo']
-        
-    email_dict['fromAddr'] = email_dict.get('from', {}).get('address', '')
-    if 'from' in email_dict:
-        del email_dict['from']
-    
-    # Set lastModifiedTime if not provided or None
-    if not email_dict.get('lastModifiedTime'):
-        email_dict['lastModifiedTime'] = email_dict.get('createdTime') or email_dict.get('sentAt')
-    
-    # Create Email object first
-    ret = Email.model_validate(email_dict)
-    
-    # Then convert timezone-aware datetimes to naive after validation
-    ret.createdTime = ret.createdTime.replace(tzinfo=None) if ret.createdTime.tzinfo else ret.createdTime
-    ret.lastModifiedTime = ret.lastModifiedTime.replace(tzinfo=None) if ret.lastModifiedTime.tzinfo else ret.lastModifiedTime
-    ret.sentAt = ret.sentAt.replace(tzinfo=None) if ret.sentAt.tzinfo else ret.sentAt
-    ret.receivedAt = ret.receivedAt.replace(tzinfo=None) if ret.receivedAt.tzinfo else ret.receivedAt
-    
-    return ret
 
-def generate_db_thread(record: dict, associated_email: Email) -> Thread:
-    thread_dict = {}
-    # Use the threadId from the record, not the email ID
-    thread_dict['id'] = record.get('threadId')  # Changed from record.get('id')
-    thread_dict['subject'] = record.get('subject')
-    thread_dict['brief'] = associated_email.bodySnippet
+def parse_dt(iso_str):
+    if not iso_str:
+        return None
+    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    # Strip timezone info for database compatibility
+    return dt.replace(tzinfo=None)
 
-    # Convert to naive datetime
-    received_at = record.get('receivedAt')
-    if isinstance(received_at, str):
-        dt = datetime.fromisoformat(received_at.replace('Z', '+00:00'))
-        thread_dict['lastMessageDate'] = dt.replace(tzinfo=None)
-    else:
-        thread_dict['lastMessageDate'] = received_at.replace(tzinfo=None) if received_at.tzinfo else received_at
-    
-    thread_dict['involvedEmails'] = [record["from"]['address']]
-    involved_attrs = ['to', 'cc', 'bcc', 'replyTo']
-    for attr in involved_attrs:
-        if attr in record:
-            for addr in record[attr]:
-                thread_dict['involvedEmails'].append(addr['address'])
-    return Thread.model_validate(thread_dict)
-    
 
-def process_records(records: list[dict]) -> tuple[list[Email], list[Thread]]:
-    emails = []
-    thread_dict = {}  # Group by threadId to avoid duplicates
-    
+async def get_or_create_email_address(session: AsyncSession, address_dict: dict) -> DbEmailAddress:
+    if not address_dict:
+        return None
+    stmt = select(DbEmailAddress).where(
+        DbEmailAddress.address == address_dict["address"])
+    result = await session.execute(stmt)
+    addr = result.scalar_one_or_none()
+    if addr:
+        # Update name if changed
+        if address_dict.get("name") and addr.name != address_dict.get("name"):
+            addr.name = address_dict.get("name")
+        return addr
+
+    addr = DbEmailAddress(
+        address=address_dict["address"],
+        name=address_dict.get("name")
+    )
+    session.add(addr)
+    await session.flush()
+    return addr
+
+
+async def get_or_create_thread(session: AsyncSession, record: dict) -> DbThread:
+    # Convert string threadId to integer
+    thread_id = int(record["threadId"], 16)  # Convert hex string to int
+
+    stmt = select(DbThread).where(DbThread.id == thread_id)
+    result = await session.execute(stmt)
+    thread = result.scalar_one_or_none()
+
+    received_at = parse_dt(record["receivedAt"])
+
+    if thread:
+        # Only update lastMessageDate if receivedAt is newer
+        if received_at and received_at > thread.lastMessageDate:
+            thread.lastMessageDate = received_at.replace(
+                tzinfo=None) if received_at.tzinfo else received_at
+        # Update subject and brief if different
+        if thread.subject != record["subject"]:
+            thread.subject = record["subject"]
+
+        # Update brief with bodySnippet
+        body_snippet = record.get("bodySnippet", "Default Brief")
+        if thread.brief != body_snippet:
+            thread.brief = body_snippet
+
+        return thread
+
+    thread = DbThread(
+        id=thread_id,  # Use converted integer ID
+        subject=record["subject"],
+        lastMessageDate=received_at.replace(
+            tzinfo=None) if received_at and received_at.tzinfo else received_at,
+        brief=record.get("bodySnippet", "Default Brief")
+    )
+    session.add(thread)
+    await session.flush()
+    return thread
+
+
+async def upsert_record(session: AsyncSession, record: dict, body: str | None = None) -> None:
+    # Handle None case for from address
+    from_data = None
+    if record.get("from"):
+        from_data = await get_or_create_email_address(session, record["from"])
+
+    to_addrs = [await get_or_create_email_address(session, a) for a in record.get("to", [])]
+    cc_addrs = [await get_or_create_email_address(session, a) for a in record.get("cc", [])]
+    bcc_addrs = [await get_or_create_email_address(session, a) for a in record.get("bcc", [])]
+    reply_to_addrs = [await get_or_create_email_address(session, a) for a in record.get("replyTo", [])]
+
+    # Ensure all addresses are flushed to get their IDs
+    await session.flush()
+
+    thread = await get_or_create_thread(session, record)
+
+    stmt = select(DbEmail).where(DbEmail.id == int(record["id"], 16))
+    result = await session.execute(stmt)
+    existing_email = result.scalar_one_or_none()
+
+    if existing_email:
+        # Skip or update fields as needed
+        return
+
+    # Fix emailLabel - don't access array index if it might be empty
+    sys_classifications = record.get("sysClassifications", [])
+    # Make sure we have a valid fromId before creating the email
+    email_label = sys_classifications[0] if sys_classifications else EmailLabel.inbox
+    if from_data is None:
+        logger.warning(
+            f"No from address found for email {record['id']}, skipping...")
+        return
+
+    email = DbEmail(
+        id=int(record["id"], 16),  # Convert hex string to int
+        threadId=int(record["threadId"], 16),  # Convert hex string to int
+        createdTime=parse_dt(record["createdTime"]),
+        lastModifiedTime=parse_dt(record.get("lastModifiedTime")),
+        sentAt=parse_dt(record["sentAt"]),
+        receivedAt=parse_dt(record["receivedAt"]),
+        subject=record["subject"],
+        labels=record.get("sysLabels", []),
+        fromId=from_data.id,  # Now safe since we checked above
+        body=record.get("body"),
+        inReplyTo=record.get("inReplyTo"),
+        emailLabel=email_label,
+        threadIndex=record.get("threadIndex")
+    )
+
+    # Filter out None values before setting relationships
+    email.to_addresses = [addr for addr in to_addrs if addr is not None]
+    email.cc_addresses = [addr for addr in cc_addrs if addr is not None]
+    email.bcc_addresses = [addr for addr in bcc_addrs if addr is not None]
+    email.reply_to_addresses = [
+        addr for addr in reply_to_addrs if addr is not None]
+
+    # Add addresses to thread access using explicit SQL to avoid lazy loading issues
+    access_addresses = set([from_data] + to_addrs +
+                           cc_addrs + bcc_addrs + reply_to_addrs)
+    # Filter out None values
+    access_addresses = {addr for addr in access_addresses if addr is not None}
+
+    # Get current thread access addresses
+    current_access_result = await session.execute(
+        text("SELECT address_id FROM address_has_threads WHERE thread_id = :thread_id"),
+        {"thread_id": thread.id}
+    )
+    current_address_ids = {row[0] for row in current_access_result.fetchall()}
+
+    # Add new addresses to the association table
+    for addr in access_addresses:
+        if addr.id not in current_address_ids:
+            await session.execute(
+                text("INSERT INTO address_has_threads (address_id, thread_id) VALUES (:address_id, :thread_id) ON CONFLICT DO NOTHING"),
+                {"address_id": addr.id, "thread_id": thread.id}
+            )
+
+    session.add(email)
+
+
+async def sync_emails_and_threads(session: AsyncSession, records: list[dict], user: DbUser) -> None:
+    """
+    Sync emails and threads using the new logic that properly handles addresses_with_access.
+    This replaces the old bulk upsert approach with a record-by-record approach that 
+    manages email addresses and thread access relationships.
+    """
+    if not records:
+        logger.info("No records to sync.")
+        return
+
+    logger.info(f"Starting sync of {len(records)} email records...")
+
+    processed_count = 0
     for record in records:
-        # Process email
-        email = convert_to_email(record)
-        emails.append(email)
-        
-        # Process thread - only create one thread per threadId
-        thread_id = record.get('threadId')
-        if thread_id not in thread_dict:
-            thread = generate_db_thread(record, email)
-            thread_dict[thread_id] = thread
-        else:
-            # Update existing thread with additional involved emails
-            existing_thread = thread_dict[thread_id]
-            new_emails = [record["from"]['address']]
-            for attr in ['to', 'cc', 'bcc', 'replyTo']:
-                if attr in record:
-                    for addr in record[attr]:
-                        new_emails.append(addr['address'])
-            
-            # Merge with existing involved emails and deduplicate
-            all_emails = set(existing_thread.involvedEmails + new_emails)
-            existing_thread.involvedEmails = list(all_emails)
-            
-            # Update with latest message date if newer
-            received_at = record.get('receivedAt')
-            if isinstance(received_at, str):
-                dt = datetime.fromisoformat(received_at.replace('Z', '+00:00')).replace(tzinfo=None)
-            else:
-                dt = received_at.replace(tzinfo=None) if received_at.tzinfo else received_at
-            
-            if dt > existing_thread.lastMessageDate:
-                existing_thread.lastMessageDate = dt
-                existing_thread.subject = record.get('subject')  # Update subject to latest
-    
-    threads = list(thread_dict.values())
-    return emails, threads
+        try:
+            if "body" in record.get("omitted", {}):
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"{settings.AURINKO_BASE_URL}/email/messages/{record['id']}",
+                        headers={"Authorization": f"Bearer {user.accountToken}"}
+                    )
+                if response.status_code == 200:
+                    record["body"] = response.json().get("body", None)
+                    logger.info(f"Fetched body for email {record['id']}")
+                else:
+                    logger.error(
+                        f"Failed to fetch body for email {record['id']}: {response.text}")
+                    continue
+            await upsert_record(session, record, body=record.get("body"))
+            processed_count += 1
+        except Exception as e:
+            logger.error(
+                f"Failed to process record {record.get('id', 'unknown')}: {e}")
+            continue
 
-async def upsert_threads(session: AsyncSession, threads: list[Thread]) -> None:
-    stmt = insert(DbThread).values([thread.model_dump() for thread in threads])
-    update_values = { key: stmt.excluded[key] for key in DbThread.__table__.columns.keys() if key != 'id' }
-    stmt = stmt.on_conflict_do_update(
-        index_elements=['id'],
-        set_=update_values    )
-    await session.execute(stmt)
+    # Commit all changes at the end
     await session.commit()
-        
+    logger.info(
+        f"Successfully synced {processed_count} email records with their threads and address relationships.")
 
-async def upsert_emails(session: AsyncSession, emails: list[Email]) -> None:
-    stmt = insert(DbEmail).values([email.model_dump() for email in emails])
-    update_values = { key: stmt.excluded[key] for key in DbEmail.__table__.columns.keys() if key != 'id' and key != 'threadId' }
-    stmt = stmt.on_conflict_do_update(
-        index_elements=['id'],
-        set_=update_values    )
-    await session.execute(stmt)
-    await session.commit()
-
-async def sync_emails_and_threads(session: AsyncSession, records: list[dict]) -> None:
-    emails, threads = process_records(records)
-    
-    if threads:
-        await upsert_threads(session, threads)
-    else:
-        logger.info("No threads to upsert.")
-
-    if emails:
-        await upsert_emails(session, emails)
-    else:
-        logger.info("No emails to upsert.")
-    
-    logger.info(f"Upserted {len(emails)} emails and {len(threads)} threads.")
 
 '''
 curl -X GET -H 'Authorization: Bearer pL3FlLcng4Mbe2pIjHgxaILbUBwrPhGR4WC1touNEGU' \

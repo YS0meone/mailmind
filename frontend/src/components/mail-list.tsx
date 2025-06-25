@@ -29,7 +29,7 @@ export function MailList({ items, selectedId, handleClick }: MailListProps) {
             <div className="flex w-full flex-col gap-1">
               <div className="flex items-center">
                 <div className="flex items-center gap-2">
-                  <div className="font-semibold">{item.id}</div>
+                  <div className="font-semibold">{item.emails[0].from_address.name ?? item.emails[0].from_address.address}</div>
                   {/* {!item.read && (
                     <span className="flex h-2 w-2 rounded-full bg-blue-600" />
                   )} */}
@@ -50,17 +50,13 @@ export function MailList({ items, selectedId, handleClick }: MailListProps) {
               <div className="text-xs font-medium">{item.subject}</div>
             </div>
             <div className="line-clamp-2 text-xs text-muted-foreground">
-              {"This is a default preview"}
+              {item.brief}
             </div>
-            {/* {item.labels.length ? (
               <div className="flex items-center gap-2">
-                {item.labels.map((label) => (
-                  <Badge key={label} variant={getBadgeVariantFromLabel(label)}>
-                    {label}
-                  </Badge>
-                ))}
+                <Badge variant={getBadgeVariantFromLabel(item.emails[0].emailLabel)}>
+                  {item.emails[0].emailLabel}
+                </Badge>
               </div>
-            ) : null} */}
           </button>
         ))}
       </div>

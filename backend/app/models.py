@@ -46,11 +46,12 @@ class DbThread(Base):
     subject: Mapped[str] = mapped_column(String, nullable=False)
     lastMessageDate: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     involvedEmails: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False)
-    
+    brief: Mapped[str] = mapped_column(String, nullable=True, default="Default Brief")
     done: Mapped[bool] = mapped_column(Boolean, default=False)
     inboxStatus: Mapped[bool] = mapped_column(Boolean, default=True)
     draftStatus: Mapped[bool] = mapped_column(Boolean, default=False)
     sentStatus: Mapped[bool] = mapped_column(Boolean, default=False)
+    
       # Relationships
     emails = relationship("DbEmail", back_populates="thread")
     
@@ -140,10 +141,10 @@ class Email(BaseModel):
     body: Optional[str] = None
     bodySnippet: Optional[str] = None
     inReplyTo: Optional[str] = None
-    attachments: List[Dict[str, Any]]  # Match SQLAlchemy type exactly
+    attachments: List[Dict[str, Any]]
     references: Optional[str] = None
     threadIndex: Optional[str] = None
-    internetHeaders: List[Dict[str, Any]]  # Match SQLAlchemy type exactly
+    internetHeaders: List[Dict[str, Any]]
     nativeProperties: Optional[Dict[str, Any]] = None
     folderId: Optional[str] = None
     weblink: Optional[str] = None
@@ -159,6 +160,7 @@ class Thread(BaseModel):
     lastMessageDate: datetime
     involvedEmails: List[str]
     done: bool = False
+    brief: str = "Default Brief"
     inboxStatus: bool = True
     draftStatus: bool = False
     sentStatus: bool = False

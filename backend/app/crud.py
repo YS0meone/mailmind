@@ -80,11 +80,13 @@ def convert_to_email(email: dict) -> Email:
     
     return ret
 
-def generate_db_thread(record: dict) -> Thread:
+def generate_db_thread(record: dict, associated_email: Email) -> Thread:
     thread_dict = {}
     # Use the threadId from the record, not the email ID
     thread_dict['id'] = record.get('threadId')  # Changed from record.get('id')
     thread_dict['subject'] = record.get('subject')
+    thread_dict['brief'] = associated_email.bodySnippet
+
     # Convert to naive datetime
     received_at = record.get('receivedAt')
     if isinstance(received_at, str):
@@ -114,7 +116,7 @@ def process_records(records: list[dict]) -> tuple[list[Email], list[Thread]]:
         # Process thread - only create one thread per threadId
         thread_id = record.get('threadId')
         if thread_id not in thread_dict:
-            thread = generate_db_thread(record)
+            thread = generate_db_thread(record, email)
             thread_dict[thread_id] = thread
         else:
             # Update existing thread with additional involved emails
@@ -176,3 +178,19 @@ async def sync_emails_and_threads(session: AsyncSession, records: list[dict]) ->
         logger.info("No emails to upsert.")
     
     logger.info(f"Upserted {len(emails)} emails and {len(threads)} threads.")
+
+'''
+curl -X GET -H 'Authorization: Bearer pL3FlLcng4Mbe2pIjHgxaILbUBwrPhGR4WC1touNEGU' \
+    -G https://api.aurinko.io/v1/email/sync/updated \
+    -d deltaToken='H4sIAAAAAAAA_2NgZmBkAAPGt60MgiBGhvF0VwDJixd4FwAAAA'
+'''
+
+'''
+curl -X GET -H 'Authorization: Bearer pL3FlLcng4Mbe2pIjHgxaILbUBwrPhGR4WC1touNEGU' \
+    https://api.aurinko.io/v1/email/messages/19778fdd6eb3eaf9/raw
+'''
+
+'''
+curl -X GET -H 'Authorization: Bearer pL3FlLcng4Mbe2pIjHgxaILbUBwrPhGR4WC1touNEGU' \
+    https://api.aurinko.io/v1/email/messages/19778fdd6eb3eaf9
+    '''

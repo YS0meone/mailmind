@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import useSWR from "swr";
+import { usePaginatedThreads } from "@/hooks/use-paginated-threads";
+import { useMailSearch } from "@/hooks/use-mail-search";
 import {
   AlertCircle,
   Archive,
@@ -14,10 +15,12 @@ import {
   ShoppingCart,
   Trash2,
   Users,
+  RefreshCw,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -35,14 +38,6 @@ import { Mail, DbEmail, Thread } from "@/types";
 import { convertDbEmailsToMails } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
-const fetcher = (url: string) =>
-  fetch(url, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  }).then((res) => res.json());
-
 interface MailProps {
   defaultLayout: number[] | undefined;
   defaultCollapsed?: boolean;
@@ -58,6 +53,30 @@ export function MailPage({
   const [selecteId, setSelectedId] = React.useState(0);
   const { user } = useCurrentUser();
 
+  // Use the new paginated hook
+  const {
+    threads,
+    isLoading,
+    isLoadingMore,
+    error,
+    hasMore,
+    loadMore,
+    refresh,
+    addThread,
+  } = usePaginatedThreads();
+
+  // Use search functionality
+  const {
+    searchQuery,
+    setSearchQuery,
+    filteredThreads,
+    isSearching,
+    clearSearch,
+  } = useMailSearch(threads);
+
+  // Use filtered threads for display
+  const displayThreads = filteredThreads;
+
   function handleClick(id: number): void {
     setSelectedId(id);
   }
@@ -66,11 +85,11 @@ export function MailPage({
     console.log("onEmailSelect called with threadId:", threadId);
 
     // First try to find in currently loaded threads
-    const thread = threads.find(
-      (t) =>
+    const thread = displayThreads.find(
+      (t: Thread) =>
         t.id.toString() === threadId ||
         t.emails.some(
-          (email) =>
+          (email: DbEmail) =>
             email.id.toString() === threadId ||
             email.threadId.toString() === threadId
         )
@@ -97,16 +116,9 @@ export function MailPage({
           const fetchedThread = await response.json();
           console.log("Fetched thread:", fetchedThread);
 
-          // Add the thread to our current threads if it's not already there
-          const existingThread = threads.find((t) => t.id === fetchedThread.id);
-          if (!existingThread && fetchedThreads) {
-            // Update the SWR cache with the new thread
-            const updatedThreads = [fetchedThread, ...fetchedThreads];
-            // You might need to use SWR's mutate function here
-            setSelectedId(fetchedThread.id);
-          } else if (existingThread) {
-            setSelectedId(existingThread.id);
-          }
+          // Add the thread to our current threads using the hook function
+          addThread(fetchedThread);
+          setSelectedId(fetchedThread.id);
         } else {
           console.log("Failed to fetch thread:", response.status);
           alert(
@@ -120,31 +132,31 @@ export function MailPage({
     }
   };
 
-  const params = new URLSearchParams({
-    page: "1",
-    limit: "20",
-  });
-  let {
-    data: fetchedThreads,
-    error,
-    isLoading,
-  } = useSWR<Thread[]>(
-    `http://localhost:8000/mail/threads?${params.toString()}`,
-    fetcher
-  );
-
-  const threads = fetchedThreads ?? [];
-
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">Loading...</div>
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Loading emails...
+          </p>
+        </div>
+      </div>
     );
   }
 
   if (error) {
     return (
       <div className="flex h-full items-center justify-center">
-        Error loading threads
+        <div className="text-center">
+          <p className="text-red-500 mb-2">Error loading emails</p>
+          <button
+            onClick={refresh}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
@@ -226,6 +238,20 @@ export function MailPage({
           <Tabs defaultValue="all" className="flex flex-col h-full">
             <div className="flex items-center px-4 py-2 flex-shrink-0">
               <h1 className="text-xl font-bold">Inbox</h1>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-2"
+                onClick={refresh}
+                disabled={isLoading || isLoadingMore}
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-4 w-4",
+                    (isLoading || isLoadingMore) && "animate-spin"
+                  )}
+                />
+              </Button>
               <TabsList className="ml-auto">
                 <TabsTrigger
                   value="all"
@@ -243,10 +269,26 @@ export function MailPage({
             </div>
             <Separator />
             <div className="bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
-              <form>
+              <form onSubmit={(e) => e.preventDefault()}>
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search" className="pl-8" />
+                  <Input
+                    placeholder="Search emails..."
+                    className="pl-8"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1 h-7 w-7 p-0"
+                      onClick={clearSearch}
+                    >
+                      ×
+                    </Button>
+                  )}
                 </div>
               </form>
             </div>
@@ -255,9 +297,12 @@ export function MailPage({
               className="m-0 flex-1 overflow-hidden flex flex-col"
             >
               <MailList
-                items={threads}
+                items={displayThreads}
                 selectedId={selecteId}
                 handleClick={handleClick}
+                onLoadMore={searchQuery ? () => {} : loadMore} // Disable pagination when searching
+                hasMore={searchQuery ? false : hasMore}
+                isLoading={searchQuery ? isSearching : isLoadingMore}
               />
             </TabsContent>
             <TabsContent
@@ -265,9 +310,12 @@ export function MailPage({
               className="m-0 flex-1 overflow-hidden flex flex-col"
             >
               <MailList
-                items={threads.filter((item) => item.done)}
+                items={displayThreads.filter((item: Thread) => item.done)}
                 selectedId={selecteId}
                 handleClick={handleClick}
+                onLoadMore={searchQuery ? () => {} : loadMore} // Disable pagination when searching
+                hasMore={searchQuery ? false : hasMore}
+                isLoading={searchQuery ? isSearching : isLoadingMore}
               />
             </TabsContent>
           </Tabs>
@@ -275,7 +323,10 @@ export function MailPage({
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={defaultLayout[2]} minSize={30}>
           <MailDisplay
-            thread={threads.find((item) => item.id === selecteId) || null}
+            thread={
+              displayThreads.find((item: Thread) => item.id === selecteId) ||
+              null
+            }
           />
         </ResizablePanel>
       </ResizablePanelGroup>

@@ -7,11 +7,12 @@ from urllib.parse import urlencode
 import httpx
 from fastapi.exceptions import HTTPException
 from app.logger_config import get_logger
-from app.api.dep import SessionDep
+from app.api.dep import SessionDep, TokenDep
 from app.models import DbUser, User
 from app.crud import upsert_user, sync_emails_and_threads
 from app.core.security import create_access_token
 from app.core.db import AsyncSessionLocal
+from sqlalchemy import select
 # import json
 # from pathlib import Path
 
@@ -349,3 +350,29 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
     )
 
     return response
+
+
+@router.get("/me", response_model=User)
+async def get_current_user(session: SessionDep, user_email: TokenDep):
+    """
+    Get current authenticated user information.
+    """
+    try:
+        # Query the user by email
+        user_query = select(DbUser).where(DbUser.email == user_email)
+        result = await session.execute(user_query)
+        db_user = result.scalar_one_or_none()
+
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return User(
+            id=db_user.id,
+            accountId=db_user.accountId,
+            accountToken=db_user.accountToken,
+            email=db_user.email,
+            lastDeltaToken=db_user.lastDeltaToken
+        )
+    except Exception as e:
+        logger.error(f"Error fetching current user: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")

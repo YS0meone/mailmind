@@ -268,6 +268,17 @@ async def sync_emails(user: User):
                 f"Failed to sync emails and threads for user {updated_user.accountId}: {e}")
             # Don't raise here as this is a background task - just log the error
 
+        # Index emails for RAG chat functionality
+        try:
+            from app.services.rag_service import rag_service
+            await rag_service.index_user_emails(session, updated_user.email)
+            logger.info(
+                f"Successfully indexed emails for RAG for user {updated_user.email}")
+        except Exception as e:
+            logger.error(
+                f"Failed to index emails for RAG for user {updated_user.email}: {e}")
+            # Don't fail the sync if indexing fails
+
 
 # async def insert_all_email_records(records: list[dict]):
 #     if not records:

@@ -149,3 +149,63 @@ async def get_thread_counts(status: str, session: SessionDep, user_email: TokenD
     except Exception as e:
         logger.error(f"Error fetching thread counts for status {status}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/thread/{thread_id}", response_model=Thread)
+async def get_single_thread(thread_id: int, session: SessionDep, user_email: TokenDep):
+    """
+    Get a single thread by ID.
+    """
+    try:
+        # Query for the specific thread with access check
+        query = (
+            select(DbThread)
+            .join(address_has_threads, DbThread.id == address_has_threads.c.thread_id)
+            .join(DbEmailAddress, address_has_threads.c.address_id == DbEmailAddress.id)
+            .where(
+                and_(
+                    DbThread.id == thread_id,
+                    DbEmailAddress.address == user_email
+                )
+            )
+            .options(
+                selectinload(DbThread.emails).selectinload(
+                    DbEmail.from_address),
+                selectinload(DbThread.emails).selectinload(
+                    DbEmail.to_addresses),
+                selectinload(DbThread.emails).selectinload(
+                    DbEmail.cc_addresses),
+                selectinload(DbThread.emails).selectinload(
+                    DbEmail.bcc_addresses),
+                selectinload(DbThread.emails).selectinload(
+                    DbEmail.reply_to_addresses)
+            )
+        )
+
+        result = await session.execute(query)
+        thread = result.scalar_one_or_none()
+
+        if not thread:
+            raise HTTPException(
+                status_code=404,
+                detail="Thread not found or you don't have access to this thread."
+            )
+
+        # Convert to Pydantic model
+        return Thread(
+            id=thread.id,
+            subject=thread.subject,
+            lastMessageDate=thread.lastMessageDate,
+            done=thread.done,
+            brief=thread.brief,
+            inboxStatus=thread.inboxStatus,
+            draftStatus=thread.draftStatus,
+            sentStatus=thread.sentStatus,
+            emails=thread.emails
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching thread {thread_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")

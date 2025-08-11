@@ -11,37 +11,37 @@ class Settings(BaseSettings):
         case_sensitive=False
     )
     # system level config
-    DEBUG: bool = False
+    DEBUG: bool
 
     # aurinko related
     AURINKO_CLIENT_ID: str
     AURINKO_CLIENT_SECRET: str
     AURINKO_BASE_URL: str
-    AURINKO_SYNC_DAYS_WITHIN: int = 3
+    AURINKO_SYNC_DAYS_WITHIN: int
 
     # application urls
-    FRONTEND_URL: str = "http://localhost:3000"
-    BACKEND_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str
+    BACKEND_URL: str
 
     # database related
-    DATABASE_URL: str = 'postgresql://neondb_owner:npg_04KthxyolXZd@ep-aged-mode-a5db6d24-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require'
-    DATABASE_POOL_SIZE: int = 10
-    DATABASE_POOL_TIMEOUT: int = 30
-    DATABASE_MAX_OVERFLOW: int = 20
+    DATABASE_URL: str
+    DATABASE_POOL_SIZE: int
+    DATABASE_POOL_TIMEOUT: int
+    DATABASE_MAX_OVERFLOW: int
 
     # security related
     SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 1
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
     # OpenAI/AI related
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_API_KEY: str
+    OPENAI_MODEL: str
 
-    # Vector Database related
-    VECTOR_DB_PATH: str = "./vector_dbs"
-    EMBEDDING_MODEL: str = "text-embedding-3-large"
-    CHUNK_SIZE: int = 1000
-    CHUNK_OVERLAP: int = 200
+    # # Vector Database related
+    # VECTOR_DB_PATH: str = "./vector_dbs"
+    # EMBEDDING_MODEL: str = "text-embedding-3-large"
+    # CHUNK_SIZE: int = 1000
+    # CHUNK_OVERLAP: int = 200
 
 
 settings = Settings()

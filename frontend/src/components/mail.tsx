@@ -34,8 +34,7 @@ import { MailList } from "@/components/mail-list";
 import { Nav } from "@/components/nav";
 import { Chat } from "@/components/chat";
 import { MailHeader } from "@/components/mail-header";
-import { Mail, DbEmail, Thread } from "@/types";
-import { convertDbEmailsToMails } from "@/lib/utils";
+import { DbEmail, Thread } from "@/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface MailProps {
@@ -50,7 +49,7 @@ export function MailPage({
   navCollapsedSize,
 }: MailProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(defaultCollapsed);
-  const [selecteId, setSelectedId] = React.useState(0);
+  const [selecteId, setSelectedId] = React.useState<string>("");
   const { user } = useCurrentUser();
 
   // Use the new paginated hook
@@ -77,7 +76,7 @@ export function MailPage({
   // Use filtered threads for display
   const displayThreads = filteredThreads;
 
-  function handleClick(id: number): void {
+  function handleClick(id: string): void {
     setSelectedId(id);
   }
 

@@ -9,8 +9,8 @@ import { Thread } from "@/types";
 
 interface MailListProps {
   items: Thread[];
-  selectedId: number;
-  handleClick: (id: number) => void;
+  selectedId: string;
+  handleClick: (id: string) => void;
   onLoadMore: () => void;
   hasMore: boolean;
   isLoading: boolean;
@@ -99,15 +99,15 @@ export function MailList({
       const { scrollTop, scrollHeight, clientHeight } = scrollElement;
       const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
 
-      console.log("Scroll event:", {
-        scrollTop,
-        scrollHeight,
-        clientHeight,
-        scrollPercentage,
-        hasMore,
-        isLoading,
-        isLoadingRefCurrent: isLoadingRef.current,
-      });
+      // console.log("Scroll event:", {
+      //   scrollTop,
+      //   scrollHeight,
+      //   clientHeight,
+      //   scrollPercentage,
+      //   hasMore,
+      //   isLoading,
+      //   isLoadingRefCurrent: isLoadingRef.current,
+      // });
 
       // Trigger load more when user has scrolled 90% of the way down
       if (

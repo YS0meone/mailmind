@@ -39,6 +39,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Thread } from "@/types";
+import ThreadDisplay from "./thread-display";
+import MailReply from "./mail-reply";
 
 interface MailDisplayProps {
   thread: Thread | null;
@@ -46,7 +48,7 @@ interface MailDisplayProps {
 
 export function MailDisplay({ thread }: MailDisplayProps) {
   const today = new Date();
-
+  
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center p-2">
@@ -185,118 +187,8 @@ export function MailDisplay({ thread }: MailDisplayProps) {
         </DropdownMenu>
       </div>
       <Separator />
-      {thread ? (
-        <div className="flex flex-1 flex-col">
-          <div className="flex items-start p-4">
-            <div className="flex items-start gap-4 text-sm">
-              <Avatar>
-                {/* <AvatarImage alt={thread.emails[0].from_address.name ?? "Unknown"} /> */}
-                <AvatarFallback>
-                  {thread.emails[0].from_address.name
-                    ? thread.emails[0].from_address.name[0]
-                    : "Unknown"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="grid gap-1">
-                <div className="font-semibold">
-                  {thread.emails[0].from_address.name ?? "Unknown"}
-                </div>
-                <div className="line-clamp-1 text-xs">{thread.subject}</div>
-                <div className="line-clamp-1 text-xs">
-                  <span className="font-medium">Reply-To:</span>{" "}
-                  {thread.emails[0].reply_to_addresses
-                    .map((addr) => addr.address)
-                    .join(", ")}
-                </div>
-              </div>
-            </div>
-            {thread.lastMessageDate && (
-              <div className="ml-auto text-xs text-muted-foreground">
-                {format(new Date(thread.lastMessageDate), "PPpp")}
-              </div>
-            )}
-          </div>
-          <Separator />
-          <div className="flex-1 overflow-hidden">
-            {thread.emails[0].body ? (
-              <div className="h-full p-4">
-                <div className="h-full border rounded-md">
-                  <iframe
-                    srcDoc={`
-                      <!DOCTYPE html>
-                      <html>
-                        <head>
-                          <meta charset="utf-8">
-                          <meta name="viewport" content="width=device-width, initial-scale=1">
-                          <style>
-                            body {
-                              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                              font-size: 14px;
-                              line-height: 1.5;
-                              color: #333;
-                              background: #fff;
-                              margin: 12px;
-                              word-wrap: break-word;
-                              overflow-wrap: break-word;
-                            }
-                            img { max-width: 100%; height: auto; }
-                            table { max-width: 100%; }
-                            * { max-width: 100% !important; }
-                          </style>
-                        </head>
-                        <body>
-                          ${thread.emails[0].body}
-                        </body>
-                      </html>
-                    `}
-                    className="w-full h-full border-0"
-                    sandbox="allow-same-origin"
-                    title="Email content"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                No content available
-              </div>
-            )}
-          </div>
-          <Separator className="mt-auto" />
-          <div className="p-4">
-            <form>
-              <div className="grid gap-4">
-                <Textarea
-                  className="p-4"
-                  placeholder={`Reply to ${
-                    thread.emails[0].from_address.name ||
-                    thread.emails[0].from_address.address
-                  }...`}
-                />
-                <div className="flex items-center">
-                  <Label
-                    htmlFor="mute"
-                    className="flex items-center gap-2 text-xs font-normal"
-                  >
-                    <Switch id="mute" aria-label="Mute thread" /> Mute this
-                    thread
-                  </Label>
-                  <Button
-                    onClick={(e) => e.preventDefault()}
-                    size="sm"
-                    className="ml-auto"
-                  >
-                    Send
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : (
-        <div className="p-8 text-center text-muted-foreground">
-          No message selected
-        </div>
-      )}
+      <ThreadDisplay thread={thread} />
+      <MailReply email={thread?.emails[0] || null} />
     </div>
   );
 }

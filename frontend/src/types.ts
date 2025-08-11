@@ -5,7 +5,7 @@ export interface DbAddress {
 }
 
 export interface DbEmail {
-  id: number;
+  id: string;
   threadId: number;
   createdTime: string;
   lastModifiedTime?: string;
@@ -25,19 +25,19 @@ export interface DbEmail {
   reply_to_addresses: DbAddress[];
 }
 
-export interface Mail {
-  id: string;
-  name: string;
-  email: string;
-  subject: string;
-  text: string;
-  date: string;
-  read: boolean;
-  labels: string[];
-}
+// export interface Mail {
+//   id: string;
+//   name: string;
+//   email: string;
+//   subject: string;
+//   text: string;
+//   date: string;
+//   read: boolean;
+//   labels: string[];
+// }
 
 export interface Thread {
-  id: number;
+  id: string;
   subject: string;
   lastMessageDate: string;
   brief: string;
@@ -46,4 +46,13 @@ export interface Thread {
   draftStatus: boolean;
   sentStatus: boolean;
   emails: DbEmail[];
+}
+
+export interface ReplyEmail {
+  from_address: DbAddress;
+  subject: string;
+  body: string;
+  to: DbAddress[];
+  cc: DbAddress[];
+  bcc: DbAddress[];
 }

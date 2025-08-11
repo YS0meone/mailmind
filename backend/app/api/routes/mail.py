@@ -2,9 +2,12 @@ from fastapi import APIRouter
 from fastapi.exceptions import HTTPException
 from app.logger_config import get_logger
 from app.api.dep import SessionDep, TokenDep
-from app.models import Thread, DbThread, DbEmail, Email, DbEmailAddress, address_has_threads
+from app.models import ReplyEmail, Thread, DbThread, DbEmail, Email, DbEmailAddress, address_has_threads
 from sqlalchemy import and_, select, func
 from sqlalchemy.orm import selectinload
+import httpx
+from app.core.config import settings
+from app.crud import get_aurinko_token
 
 logger = get_logger(__name__)
 
@@ -67,6 +70,59 @@ Test with:
 curl -X GET "http://localhost:8000/mail/threads?page=1&limit=10" \
     -H "Authorization: Bearer <token>"
 '''
+
+
+@router.post("/thread/{message_id}/reply")
+async def reply_to_message(message_id: str, reply_email: ReplyEmail, session: SessionDep, user_email: TokenDep):
+    """
+    Reply to a message.
+    """
+    try:
+        aurinko_token = await get_aurinko_token(session, user_email)
+        if not aurinko_token:
+            raise HTTPException(
+                status_code=401, detail="Unauthorized. Please login again.")
+        # logger.info(f"message_id: {message_id}")
+        # Build minimal payload that aligns with Aurinko expectations
+        def _addr(a):
+            return {"address": a.address, "name": a.name} if a else None
+
+        payload: dict = {"body": reply_email.body}
+        if reply_email.to:
+            payload["to"] = [_addr(a) for a in reply_email.to]
+        if reply_email.cc:
+            payload["cc"] = [_addr(a) for a in reply_email.cc]
+        if reply_email.bcc:
+            payload["bcc"] = [_addr(a) for a in reply_email.bcc]
+
+        logger.info(
+            f"Replying via Aurinko id hex={message_id} payloadKeys={list(payload.keys())}")
+        async with httpx.AsyncClient() as client:
+            url = f"{settings.AURINKO_BASE_URL}/email/messages/{message_id}/reply?bodyType=text"
+            response = await client.post(url, headers={"Authorization": f"Bearer {aurinko_token}"}, json=payload)
+            if response.status_code == 200:
+                return {
+                    "message": "Message replied successfully",
+                    "aurinkoMessageIdHex": message_id,
+                    "aurinkoMessageIdDec": message_id,
+                }
+            else:
+                logger.error(
+                    f"Aurinko reply failed {response.status_code}: {response.text}")
+                detail = response.text
+                try:
+                    detail_json = response.json()
+                    detail = detail_json.get(
+                        "message") or detail_json.get("detail") or detail
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=response.status_code, detail=detail)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error replying to message {message_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/threads", response_model=list[Thread])
@@ -209,3 +265,22 @@ async def get_single_thread(thread_id: int, session: SessionDep, user_email: Tok
     except Exception as e:
         logger.error(f"Error fetching thread {thread_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+# curl -X GET -H 'Authorization: Bearer WPXcOzlT3vNjp0R--p5IkS6u-dypq9XxRvdaVLcoBL8' \
+#     https://api.aurinko.io/v1/email/conversations/1988b48816197963
+
+
+# curl -H 'Authorization: Bearer WPXcOzlT3vNjp0R--p5IkS6u-dypq9XxRvdaVLcoBL8' \
+# -X POST https://api.aurinko.io/v1/email/messages/1988b48816197963/reply?bodyType=text \
+# -d '{
+#     "subject": "RE: XXOO",
+#     "body": "mua",
+#     "to": [{"address": "nikkiwu0128@gmail.com"}]
+#     "cc": []
+#     }'
+
+
+# curl -X POST 'https://api.aurinko.io/v1/email/messages/1988b48816197963/reply?bodyType=text' \
+#   -H 'Authorization: Bearer WPXcOzlT3vNjp0R--p5IkS6u-dypq9XxRvdaVLcoBL8' \
+#   -H 'Content-Type: application/json' \
+#   --data '{"subject":"RE: XXOO","body":"mua","to":[{"address":"nikkiwu0128@gmail.com"}],"cc":[],"bcc":[]}'

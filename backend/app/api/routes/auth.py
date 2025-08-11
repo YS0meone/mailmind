@@ -333,8 +333,8 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
     # return an access token and redirect to the frontend
     expire_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(user.email, expire_minutes)
-    logger.info("Generated access token for user %s: %s",
-                user.accountId, access_token)
+    # logger.info("Generated access token for user %s: %s",
+    #             user.accountId, access_token)
 
     redirect_url = f"{settings.FRONTEND_URL}/inbox"
 
@@ -344,7 +344,7 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=True,
+        secure=not settings.DEBUG,
         samesite="Lax",  # Adjust as needed
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     )

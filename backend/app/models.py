@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, relationship
 from sqlalchemy import String, Integer, BigInteger, Boolean, DateTime, Text, Table, Column, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from pydantic import BaseModel
+from sqlalchemy.dialects.postgresql import ARRAY
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
@@ -9,8 +9,6 @@ from enum import Enum
 
 class Base(DeclarativeBase):
     pass
-
-# Enums
 
 
 class EmailLabel(str, Enum):
@@ -24,21 +22,6 @@ class EmailLabel(str, Enum):
     forums = "forums"
     spam = "spam"
     trash = "trash"
-
-# class Sensitivity(str, Enum):
-#     normal = "normal"
-#     private = "private"
-#     personal = "personal"
-#     confidential = "confidential"
-
-# class MeetingMessageMethod(str, Enum):
-#     request = "request"
-#     reply = "reply"
-#     cancel = "cancel"
-#     counter = "counter"
-#     other = "other"
-
-# SQLAlchemy ORM Models
 
 
 class DbUser(Base):
@@ -232,6 +215,8 @@ class EmailAddress(BaseModel):
 
 
 class Thread(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     subject: str
     lastMessageDate: datetime
@@ -245,7 +230,28 @@ class Thread(BaseModel):
     def __repr__(self):
         return f"Thread(id={self.id}, subject={self.subject}, lastMessageDate={self.lastMessageDate}, done={self.done})"
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def _hex_to_id(cls, v):
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s.startswith("0x"):
+                s = s[2:]
+            if not s or any([b for b in s.encode() if b not in range(ord('0'), ord('9'))]):
+                raise ValueError("Invalid hex string")
+            return int(s, 16)
+        if isinstance(v, int):
+            return v
+        raise ValueError("Invalid id")
+
+    @field_serializer("id")
+    def _id_to_str(self, v, _):
+        return format(v, 'x')
+
+
 class Email(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     threadId: int
     createdTime: datetime
@@ -267,6 +273,36 @@ class Email(BaseModel):
 
     def __repr__(self):
         return f"Email(id={self.id}, threadId={self.threadId}, subject={self.subject}, fromId={self.fromId}, sentAt={self.sentAt})"
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _hex_to_id(cls, v):
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s.startswith("0x"):
+                s = s[2:]
+            if not s or any([b for b in s.encode() if b not in range(ord('0'), ord('9'))]):
+                raise ValueError("Invalid hex string")
+            return int(s, 16)
+        if isinstance(v, int):
+            return v
+        raise ValueError("Invalid id")
+
+    @field_serializer("id")
+    def _id_to_hex(self, v, _):
+        return format(v, 'x')
+
+
+class ReplyEmail(BaseModel):
+    from_address: EmailAddress
+    subject: str
+    body: str
+    to: List[EmailAddress]
+    cc: List[EmailAddress]
+    bcc: List[EmailAddress]
+
+    def __repr__(self):
+        return f"ReplyEmail(subject={self.subject}, from_address={self.from_address}, to={self.to}, cc={self.cc}, bcc={self.bcc}, body={self.body})"
 
 
 # Update forward references for Pydantic models

@@ -35,7 +35,13 @@ class Settings(BaseSettings):
 
     # OpenAI/AI related
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # Vector Database related
+    VECTOR_DB_PATH: str = "./vector_dbs"
+    EMBEDDING_MODEL: str = "text-embedding-3-large"
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
 
 
 settings = Settings()

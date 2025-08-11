@@ -75,6 +75,13 @@ async def get_or_create_email_address(session: AsyncSession, address_dict: dict)
     return addr
 
 
+async def get_aurinko_token(session: AsyncSession, user_email: str) -> str:
+    stmt = select(DbUser).where(DbUser.email == user_email)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    return user.accountToken
+
+
 async def get_or_create_thread(session: AsyncSession, record: dict) -> DbThread:
     # Convert string threadId to integer
     thread_id = int(record["threadId"], 16)  # Convert hex string to int
@@ -103,6 +110,7 @@ async def get_or_create_thread(session: AsyncSession, record: dict) -> DbThread:
 
     thread = DbThread(
         id=thread_id,  # Use converted integer ID
+        provider_id=record.get("threadId"),
         subject=record["subject"],
         lastMessageDate=received_at.replace(
             tzinfo=None) if received_at and received_at.tzinfo else received_at,
@@ -224,6 +232,11 @@ async def sync_emails_and_threads(session: AsyncSession, records: list[dict], us
             await upsert_record(session, record, body=record.get("body"))
             processed_count += 1
         except Exception as e:
+            # Roll back this failed record so the session can proceed
+            try:
+                await session.rollback()
+            except Exception:
+                pass
             logger.error(
                 f"Failed to process record {record.get('id', 'unknown')}: {e}")
             continue

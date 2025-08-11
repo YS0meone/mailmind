@@ -1,18 +1,19 @@
 from asyncio import sleep
 from datetime import timedelta
-from fastapi import APIRouter, Request, BackgroundTasks
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Request, BackgroundTasks, Body
+from fastapi.responses import RedirectResponse, JSONResponse
 from app.core.config import settings
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 import httpx
 from fastapi.exceptions import HTTPException
 from app.logger_config import get_logger
 from app.api.dep import SessionDep, TokenDep
 from app.models import DbUser, User
 from app.crud import upsert_user, sync_emails_and_threads
-from app.core.security import create_access_token
+from app.core.security import create_access_token, verify_password
 from app.core.db import AsyncSessionLocal
 from sqlalchemy import select
+from app.core.security import get_password_hash
 # import json
 # from pathlib import Path
 
@@ -78,7 +79,7 @@ async def init_sync_emails(user: DbUser):
                         "Authorization": f"Bearer {user.accountToken}",
                     },
                     params={
-                        "daysWithin": settings.AURINKO_SYNC_DAYS_WITHIN,
+                        "daysWithin": user.syncDaysWithin or settings.AURINKO_SYNC_DAYS_WITHIN,
                     }
                 )
                 response.raise_for_status()
@@ -325,10 +326,20 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
         email=user_email,
     )
 
-    # run background task to sync emails
-    background_tasks.add_task(sync_emails, user)
-    logger.info("Background task to sync emails added for user %s",
-                user.accountId)
+    # If this was a signup, don't sync yet; let the user finish config first
+    is_signup = False
+    try:
+        import json
+        parsed = json.loads(state)
+        is_signup = isinstance(parsed, dict) and parsed.get(
+            "source") == "signup"
+    except Exception:
+        pass
+
+    if not is_signup:
+        background_tasks.add_task(sync_emails, user)
+        logger.info("Background task to sync emails added for user %s",
+                    user.accountId)
 
     # return an access token and redirect to the frontend
     expire_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -336,16 +347,21 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
     # logger.info("Generated access token for user %s: %s",
     #             user.accountId, access_token)
 
-    redirect_url = f"{settings.FRONTEND_URL}/inbox"
+    # Determine redirect target based on state (signup vs login)
+    redirect_path = "/signup/complete" if is_signup else "/inbox"
+    redirect_url = f"{settings.FRONTEND_URL}{redirect_path}"
 
     # set http-only cookie with the access token
     response = RedirectResponse(url=redirect_url, status_code=307)
+    cookie_domain = urlparse(settings.FRONTEND_URL).hostname
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         secure=not settings.DEBUG,
         samesite="Lax",  # Adjust as needed
+        domain=cookie_domain,
+        path="/",
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     )
 
@@ -376,3 +392,90 @@ async def get_current_user(session: SessionDep, user_email: TokenDep):
     except Exception as e:
         logger.error(f"Error fetching current user: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/login")
+async def login(
+    session: SessionDep,
+    email: str = Body(...),
+    password: str = Body(...),
+):
+    try:
+        user_query = select(DbUser).where(DbUser.email == email)
+        result = await session.execute(user_query)
+        db_user = result.scalar_one_or_none()
+        if not db_user or not db_user.passwordHash or not verify_password(password, db_user.passwordHash):
+            raise HTTPException(
+                status_code=401, detail="Invalid email or password")
+
+        expire_minutes = timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(email, expire_minutes)
+        response = JSONResponse({"message": "Logged in"})
+        cookie_domain = urlparse(settings.FRONTEND_URL).hostname
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=not settings.DEBUG,
+            samesite="Lax",
+            domain=cookie_domain,
+            path="/",
+            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during login for {email}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/signup/complete")
+async def complete_signup(
+    session: SessionDep,
+    user_email: TokenDep,
+    password: str = Body(..., min_length=8),
+    syncDaysWithin: int = Body(..., ge=1, le=365),
+    background_tasks: BackgroundTasks = None,
+):
+    try:
+        user_query = select(DbUser).where(DbUser.email == user_email)
+        result = await session.execute(user_query)
+        db_user = result.scalar_one_or_none()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        db_user.passwordHash = get_password_hash(password)
+        db_user.syncDaysWithin = syncDaysWithin
+        await session.commit()
+
+        if background_tasks is not None:
+            background_tasks.add_task(sync_emails, User(
+                accountId=db_user.accountId,
+                accountToken=db_user.accountToken,
+                email=db_user.email,
+                lastDeltaToken=db_user.lastDeltaToken,
+            ))
+
+        return {"message": "Signup completed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error completing signup for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/logout")
+async def logout():
+    response = JSONResponse({"message": "Logged out"})
+    cookie_domain = urlparse(settings.FRONTEND_URL).hostname
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        domain=cookie_domain,
+        samesite="Lax",
+        secure=not settings.DEBUG,
+        httponly=True,
+    )
+    return response

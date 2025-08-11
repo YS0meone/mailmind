@@ -31,6 +31,9 @@ class DbUser(Base):
     accountToken: Mapped[str] = mapped_column(nullable=False)
     email: Mapped[str] = mapped_column(nullable=False, unique=True)
     lastDeltaToken: Mapped[Optional[str]] = mapped_column(nullable=True)
+    passwordHash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    syncDaysWithin: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True)
 
     def __repr__(self):
         return f"<DbUser(id={self.id}, accountId={self.accountId}, email={self.email}, lastDeltaToken={self.lastDeltaToken})>"

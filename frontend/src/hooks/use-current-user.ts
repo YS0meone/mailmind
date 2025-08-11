@@ -21,7 +21,7 @@ const fetcher = (url: string) =>
 
 export function useCurrentUser() {
   const { data, error, isLoading } = useSWR<User>(
-    'http://localhost:8000/auth/me',
+    `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/auth/me`,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -29,15 +29,8 @@ export function useCurrentUser() {
     }
   );
 
-  // Fallback to mock user if API fails (for development)
-  const mockUser: User = {
-    email: "user@example.com",
-    name: "John Doe",
-    id: "1"
-  };
-
   return {
-    user: data || (error ? mockUser : undefined),
+    user: data,
     isLoading,
     error
   };

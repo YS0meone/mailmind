@@ -139,7 +139,26 @@ export function MailHeader({
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={async () => {
+                try {
+                  const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/logout`,
+                    {
+                      method: "POST",
+                      credentials: "include",
+                    }
+                  );
+                  if (!response.ok) {
+                    throw new Error("Logout failed");
+                  }
+                } catch (e) {
+                  console.error(e);
+                }
+                // Force a hard redirect after cookie deletion
+                window.location.replace("/login");
+              }}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
             </DropdownMenuItem>
@@ -152,12 +171,47 @@ export function MailHeader({
   return (
     <div className="flex items-center justify-between p-2 space-x-2">
       <div className="flex items-center space-x-2 flex-1 min-w-0">
-        <Avatar className="h-8 w-8 flex-shrink-0">
-          <AvatarImage src="" alt={displayName} />
-          <AvatarFallback className="text-xs">
-            {getInitials(userName, userEmail)}
-          </AvatarFallback>
-        </Avatar>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <Avatar className="h-8 w-8 flex-shrink-0">
+                <AvatarImage src="" alt={displayName} />
+                <AvatarFallback className="text-xs">
+                  {getInitials(userName, userEmail)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="sr-only">User menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={async () => {
+                try {
+                  const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/logout`,
+                    {
+                      method: "POST",
+                      credentials: "include",
+                    }
+                  );
+                  if (!response.ok) {
+                    throw new Error("Logout failed");
+                  }
+                } catch (e) {
+                  console.error(e);
+                }
+                window.location.href = "/login";
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex flex-col min-w-0 flex-1">
           <p className="text-sm font-medium leading-none truncate">
             {displayName}

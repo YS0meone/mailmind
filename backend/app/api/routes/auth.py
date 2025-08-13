@@ -16,6 +16,7 @@ from sqlalchemy import select
 from app.core.security import get_password_hash
 # import json
 # from pathlib import Path
+import asyncio
 
 
 logger = get_logger(__name__)
@@ -39,18 +40,48 @@ async def aurinko_redirect(request: Request):
     return RedirectResponse(url=redirect_url, status_code=307)
 
 
+async def _request_with_retry(method: str, url: str, *, headers: dict | None = None, params: dict | None = None, auth=None, json=None):
+    limits = httpx.Limits(max_connections=settings.HTTP_MAX_CONNECTIONS,
+                          max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS)
+    timeout = httpx.Timeout(connect=settings.HTTP_CONNECT_TIMEOUT,
+                            read=settings.HTTP_READ_TIMEOUT,
+                            write=settings.HTTP_WRITE_TIMEOUT,
+                            pool=settings.HTTP_POOL_TIMEOUT)
+    attempts = settings.HTTP_RETRY_ATTEMPTS
+    backoff_base = settings.HTTP_RETRY_BACKOFF_BASE
+    cap = settings.HTTP_RETRY_BACKOFF_CAP
+    jitter = settings.HTTP_RETRY_JITTER
+    retry_status = set(settings.HTTP_RETRY_STATUS_CODES)
+    last_exc = None
+    async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
+        for attempt in range(attempts):
+            try:
+                resp = await client.request(method, url, headers=headers, params=params, auth=auth, json=json)
+                if resp.status_code in retry_status:
+                    raise httpx.HTTPStatusError(
+                        "retryable status", request=resp.request, response=resp)
+                resp.raise_for_status()
+                return resp
+            except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError) as e:
+                last_exc = e
+                if attempt == attempts - 1:
+                    break
+                sleep_s = min(cap, backoff_base * (2 ** attempt)
+                              ) + (jitter * (2 * (0.5 - 0)))
+                await asyncio.sleep(sleep_s)
+        raise last_exc
+
+
 async def exchangeCodeForToken(code: str) -> dict | None:
     token_url = f"{settings.AURINKO_BASE_URL}/auth/token/{code}"
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                token_url,
-                auth=(settings.AURINKO_CLIENT_ID,
-                      settings.AURINKO_CLIENT_SECRET)
-            )
-            response.raise_for_status()
-            logger.info("Token exchange successful")
-            return response.json()
+        response = await _request_with_retry(
+            "POST",
+            token_url,
+            auth=(settings.AURINKO_CLIENT_ID, settings.AURINKO_CLIENT_SECRET),
+        )
+        logger.info("Token exchange successful")
+        return response.json()
     except httpx.HTTPStatusError as e:
         logger.error("HTTP error %s - %s",
                      e.response.status_code, e.response.text)
@@ -69,32 +100,27 @@ async def init_sync_emails(user: DbUser):
     init_succeeded = False
     retry = 5
     try:
-        async with httpx.AsyncClient() as client:
-            while not init_succeeded and retry > 0:
-                logger.info("Starting email sync for user %s", user.accountId)
-                # Send a POST request to start the sync
-                response = await client.post(
-                    sync_url,
-                    headers={
-                        "Authorization": f"Bearer {user.accountToken}",
-                    },
-                    params={
-                        "daysWithin": user.syncDaysWithin or settings.AURINKO_SYNC_DAYS_WITHIN,
-                    }
-                )
-                response.raise_for_status()
-                # we check if the response has a field called ready that is true
-                if response.json().get("ready", False):
-                    init_succeeded = True
-                    logger.info(
-                        "Email sync initialization for user %s completed successfully", user.accountId)
-                else:
-                    logger.info(
-                        "Email sync initialization for user %s is still in progress, waiting...", user.accountId)
-                    # wait for 1 second before checking again
-                    await sleep(1)
-                    retry -= 1
-            return response.json()
+        while not init_succeeded and retry > 0:
+            logger.info("Starting email sync for user %s", user.accountId)
+            response = await _request_with_retry(
+                "POST",
+                sync_url,
+                headers={"Authorization": f"Bearer {user.accountToken}"},
+                params={
+                    "daysWithin": user.syncDaysWithin or settings.AURINKO_SYNC_DAYS_WITHIN},
+            )
+            # we check if the response has a field called ready that is true
+            if response.json().get("ready", False):
+                init_succeeded = True
+                logger.info(
+                    "Email sync initialization for user %s completed successfully", user.accountId)
+            else:
+                logger.info(
+                    "Email sync initialization for user %s is still in progress, waiting...", user.accountId)
+                # wait for 1 second before checking again
+                await sleep(1)
+                retry -= 1
+        return response.json()
     except httpx.HTTPStatusError as e:
         logger.error("HTTP error %s - %s",
                      e.response.status_code, e.response.text)
@@ -111,68 +137,61 @@ async def increment_sync_updated(delta_token: str, access_token: str, records: l
     increment_url = f"{settings.AURINKO_BASE_URL}/email/sync/updated"
     current_delta_token = delta_token
     try:
-        async with httpx.AsyncClient() as client:
-            while current_delta_token:
-                response = await client.get(
-                    increment_url,
-                    headers={
-                        "Authorization": f"Bearer {access_token}",
-                    },
-                    params={
-                        "deltaToken": current_delta_token
-                    }
+        while current_delta_token:
+            response = await _request_with_retry(
+                "GET",
+                increment_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"deltaToken": current_delta_token},
+            )
+            logger.info("response received with delta token: %s",
+                        current_delta_token)
+            data = response.json()
+
+            # Get the next delta token from the response
+            next_delta_token = data.get("nextDeltaToken")
+            page_token = data.get("nextPageToken")
+
+            logger.info("current delta token: %s, next delta token: %s, next page token: %s",
+                        current_delta_token, next_delta_token, page_token)
+
+            # Add records from this page
+            records.extend(data.get("records", []))
+            logger.info("Fetched %d records", len(data.get("records", [])))
+
+            # Handle pagination for the current delta token
+            while page_token:
+                logger.info(
+                    "Fetching next page of emails with page token: %s", page_token)
+                response = await _request_with_retry(
+                    "GET",
+                    f"{settings.AURINKO_BASE_URL}/email/sync/updated",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"pageToken": page_token},
                 )
-                response.raise_for_status()
-                logger.info("response received with delta token: %s",
-                            current_delta_token)
+
                 data = response.json()
-
-                # Get the next delta token from the response
-                next_delta_token = data.get("nextDeltaToken")
                 page_token = data.get("nextPageToken")
-
-                logger.info("current delta token: %s, next delta token: %s, next page token: %s",
-                            current_delta_token, next_delta_token, page_token)
-
-                # Add records from this page
+                logger.info("next page token: %s", page_token)
                 records.extend(data.get("records", []))
-                logger.info("Fetched %d records", len(data.get("records", [])))
+                logger.info("Fetched %d additional records",
+                            len(data.get("records", [])))
 
-                # Handle pagination for the current delta token
-                while page_token:
-                    logger.info(
-                        "Fetching next page of emails with page token: %s", page_token)
-                    response = await client.get(
-                        f"{settings.AURINKO_BASE_URL}/email/sync/updated",
-                        headers={
-                            "Authorization": f"Bearer {access_token}",
-                        },
-                        params={"pageToken": page_token}
-                    )
-                    response.raise_for_status()
+                # Update next_delta_token from paginated response if present
+                if data.get("nextDeltaToken"):
+                    next_delta_token = data.get("nextDeltaToken")
 
-                    data = response.json()
-                    page_token = data.get("nextPageToken")
-                    logger.info("next page token: %s", page_token)
-                    records.extend(data.get("records", []))
-                    logger.info("Fetched %d additional records",
-                                len(data.get("records", [])))
+            logger.info("Updated email for delta token %s completed with %d total records",
+                        current_delta_token, len(records))
 
-                    # Update next_delta_token from paginated response if present
-                    if data.get("nextDeltaToken"):
-                        next_delta_token = data.get("nextDeltaToken")
+            # Break if no new delta token (no more updates)
+            if not next_delta_token or next_delta_token == current_delta_token:
+                logger.info(
+                    "No more updates available. Breaking sync loop.")
+                break
 
-                logger.info("Updated email for delta token %s completed with %d total records",
-                            current_delta_token, len(records))
-
-                # Break if no new delta token (no more updates)
-                if not next_delta_token or next_delta_token == current_delta_token:
-                    logger.info(
-                        "No more updates available. Breaking sync loop.")
-                    break
-
-                # Move to next delta token
-                current_delta_token = next_delta_token
+            # Move to next delta token
+            current_delta_token = next_delta_token
 
             logger.info("All emails synced successfully for user")
             return current_delta_token
@@ -292,7 +311,7 @@ async def sync_emails(user: User):
 #     logger.info("Inserted %d email records into the database", len(records))
 
 @router.get("/callback")
-async def aurinko_final_callback(code: str, state: str, session: SessionDep, background_tasks: BackgroundTasks):
+async def aurinko_final_callback(code: str, state: str, session: SessionDep, background_tasks: BackgroundTasks, request: Request):
     """
     Handle the final callback from Aurinko after authorization.
     This endpoint is called by Aurinko after the user has authorized the application.
@@ -337,9 +356,17 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
         pass
 
     if not is_signup:
-        background_tasks.add_task(sync_emails, user)
-        logger.info("Background task to sync emails added for user %s",
-                    user.accountId)
+        try:
+            # Lazily create Arq pool if missing
+            if getattr(request.app.state, "arq", None) is None:
+                from arq.connections import create_pool
+                request.app.state.arq = await create_pool(request.app.state.redis_settings)
+            await request.app.state.arq.enqueue_job("sync_emails_task", user.email)
+            logger.info(
+                "Enqueued Arq job to sync emails for user %s", user.accountId)
+        except Exception as e:
+            logger.error(
+                f"Failed to enqueue sync job for user {user.accountId}: {e}")
 
     # return an access token and redirect to the frontend
     expire_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -438,6 +465,7 @@ async def complete_signup(
     password: str = Body(..., min_length=8),
     syncDaysWithin: int = Body(..., ge=1, le=365),
     background_tasks: BackgroundTasks = None,
+    request: Request = None,
 ):
     try:
         user_query = select(DbUser).where(DbUser.email == user_email)
@@ -450,13 +478,18 @@ async def complete_signup(
         db_user.syncDaysWithin = syncDaysWithin
         await session.commit()
 
-        if background_tasks is not None:
-            background_tasks.add_task(sync_emails, User(
-                accountId=db_user.accountId,
-                accountToken=db_user.accountToken,
-                email=db_user.email,
-                lastDeltaToken=db_user.lastDeltaToken,
-            ))
+        # Enqueue email sync via Arq worker instead of BackgroundTasks
+        try:
+            if request is not None:
+                if getattr(request.app.state, "arq", None) is None:
+                    from arq.connections import create_pool
+                    request.app.state.arq = await create_pool(request.app.state.redis_settings)
+                await request.app.state.arq.enqueue_job("sync_emails_task", db_user.email)
+                logger.info(
+                    "Enqueued Arq job to sync emails for user %s after signup", db_user.accountId)
+        except Exception as e:
+            logger.error(
+                f"Failed to enqueue signup sync job for user {db_user.accountId}: {e}")
 
         return {"message": "Signup completed"}
     except HTTPException:

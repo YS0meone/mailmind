@@ -37,6 +37,26 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str
 
+    # Task queue / Redis
+    # Use 127.0.0.1 to avoid IPv6 localhost resolution issues on Windows
+    REDIS_URL: str
+    SYNC_LOCK_TTL_SECONDS: int
+
+    # HTTP client settings for external calls (Aurinko)
+    HTTP_CONNECT_TIMEOUT: float = 10.0
+    HTTP_READ_TIMEOUT: float = 60.0
+    HTTP_WRITE_TIMEOUT: float = 10.0
+    HTTP_POOL_TIMEOUT: float = 60.0
+    HTTP_MAX_CONNECTIONS: int = 100
+    HTTP_MAX_KEEPALIVE_CONNECTIONS: int = 20
+
+    # HTTP retry/backoff settings
+    HTTP_RETRY_ATTEMPTS: int = 5
+    HTTP_RETRY_BACKOFF_BASE: float = 0.5
+    HTTP_RETRY_BACKOFF_CAP: float = 8.0
+    HTTP_RETRY_JITTER: float = 0.2
+    HTTP_RETRY_STATUS_CODES: list[int] = [429, 500, 502, 503, 504]
+
     # # Vector Database related
     # VECTOR_DB_PATH: str = "./vector_dbs"
     # EMBEDDING_MODEL: str = "text-embedding-3-large"

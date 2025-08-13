@@ -1,4 +1,5 @@
 import httpx
+import asyncio
 from app.core.config import settings
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -217,11 +218,42 @@ async def sync_emails_and_threads(session: AsyncSession, records: list[dict], us
     for record in records:
         try:
             if "body" in record.get("omitted", {}):
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(
-                        f"{settings.AURINKO_BASE_URL}/email/messages/{record['id']}",
-                        headers={"Authorization": f"Bearer {user.accountToken}"}
-                    )
+                limits = httpx.Limits(
+                    max_connections=settings.HTTP_MAX_CONNECTIONS,
+                    max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+                )
+                timeout = httpx.Timeout(
+                    connect=settings.HTTP_CONNECT_TIMEOUT,
+                    read=settings.HTTP_READ_TIMEOUT,
+                    write=settings.HTTP_WRITE_TIMEOUT,
+                    pool=settings.HTTP_POOL_TIMEOUT,
+                )
+                attempts = settings.HTTP_RETRY_ATTEMPTS
+                base = settings.HTTP_RETRY_BACKOFF_BASE
+                cap = settings.HTTP_RETRY_BACKOFF_CAP
+                jitter = settings.HTTP_RETRY_JITTER
+                retry_status = set(settings.HTTP_RETRY_STATUS_CODES)
+                async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
+                    last_exc = None
+                    for attempt in range(attempts):
+                        try:
+                            response = await client.get(
+                                f"{settings.AURINKO_BASE_URL}/email/messages/{record['id']}",
+                                headers={
+                                    "Authorization": f"Bearer {user.accountToken}"}
+                            )
+                            if response.status_code in retry_status:
+                                raise httpx.HTTPStatusError(
+                                    "retryable status", request=response.request, response=response
+                                )
+                            response.raise_for_status()
+                            break
+                        except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError) as e:
+                            last_exc = e
+                            if attempt == attempts - 1:
+                                raise
+                            sleep_s = min(cap, base * (2 ** attempt)) + jitter
+                            await asyncio.sleep(sleep_s)
                 if response.status_code == 200:
                     record["body"] = response.json().get("body", None)
                     logger.info(f"Fetched body for email {record['id']}")

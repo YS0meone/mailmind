@@ -79,16 +79,7 @@ async def chat_with_emails(
             status_code=500, detail="Error processing chat request")
 
 
-@router.post("/index")
-async def index_user_emails(session: SessionDep, user_email: TokenDep):
-    """Index user's emails for better search and chat functionality"""
-    try:
-        logger.info(f"Indexing emails for user: {user_email}")
-        await rag_service.index_user_emails(session, user_email)
-        return {"message": "Emails indexed successfully"}
-    except Exception as e:
-        logger.error(f"Error indexing emails: {e}")
-        raise HTTPException(status_code=500, detail="Error indexing emails")
+# Indexing endpoints disabled for now
 
 
 @router.get("/status")

@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     HTTP_RETRY_JITTER: float = 0.2
     HTTP_RETRY_STATUS_CODES: list[int] = [429, 500, 502, 503, 504]
 
+    # Webhooks
+    AURINKO_SIGNING_SECRET: str
+    AURINKO_NOTIFICATION_URL: str
+
     # # Vector Database related
     # VECTOR_DB_PATH: str = "./vector_dbs"
     # EMBEDDING_MODEL: str = "text-embedding-3-large"

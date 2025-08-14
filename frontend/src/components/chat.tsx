@@ -68,7 +68,7 @@ export function Chat({ onEmailSelect }: ChatProps) {
 
   const checkChatStatus = async () => {
     try {
-      const response = await fetch("http://localhost:8000/chat/status", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/chat/status`, {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -92,7 +92,7 @@ export function Chat({ onEmailSelect }: ChatProps) {
 
   const indexEmails = async () => {
     try {
-      const response = await fetch("http://localhost:8000/chat/index", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/chat/index`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -125,7 +125,7 @@ export function Chat({ onEmailSelect }: ChatProps) {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:8000/chat/", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/chat/`, {
         method: "POST",
         credentials: "include",
         headers: {

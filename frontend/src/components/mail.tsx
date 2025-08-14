@@ -102,7 +102,9 @@ export function MailPage({
       try {
         // Fetch the specific thread by threadId
         const response = await fetch(
-          `http://localhost:8000/mail/thread/${threadId}`,
+          `${
+            process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+          }/mail/thread/${threadId}`,
           {
             credentials: "include",
             headers: {
@@ -133,13 +135,36 @@ export function MailPage({
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Loading emails...
+      <div className="relative flex h-full items-center justify-center p-6">
+        <div className="w-full max-w-lg rounded-xl border bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/60 p-8 shadow-sm text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+            <Inbox className="h-7 w-7 text-primary" />
+          </div>
+          <h2 className="text-xl font-semibold">Loading your inbox</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Fetching your latest emails. This should only take a moment.
           </p>
+          <div className="mt-5 flex flex-col items-center gap-3">
+            <div className="h-2 w-56 overflow-hidden rounded-full bg-muted">
+              <div className="h-full w-1/3 animate-[progress_1.2s_ease-in-out_infinite] rounded-full bg-primary" />
+            </div>
+            <p className="text-xs text-muted-foreground">Preparing threads…</p>
+          </div>
         </div>
+
+        <style jsx>{`
+          @keyframes progress {
+            0% {
+              transform: translateX(-100%);
+            }
+            50% {
+              transform: translateX(20%);
+            }
+            100% {
+              transform: translateX(120%);
+            }
+          }
+        `}</style>
       </div>
     );
   }

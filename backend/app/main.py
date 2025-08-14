@@ -4,6 +4,7 @@ from app.core.config import settings
 from .logger_config import setup_logging
 from fastapi.middleware.cors import CORSMiddleware
 from arq.connections import create_pool, RedisSettings
+import redis.asyncio as redis
 from contextlib import asynccontextmanager
 
 setup_logging()
@@ -11,16 +12,24 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Lazy init: don't fail startup if Redis is unavailable
-    app.state.arq = None
+    # Strict init: require Redis at startup
     app.state.redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    app.state.arq = await create_pool(app.state.redis_settings)
+    # Sanity check
+    await app.state.arq.ping()
+    # Create a shared Redis client for API reads (e.g., /sync/status)
+    app.state.redis = redis.from_url(settings.REDIS_URL)
+    await app.state.redis.ping()
     try:
-        # Optionally pre-warm here; we skip to avoid blocking startup
-        pass
-    finally:
         yield
+    finally:
         if getattr(app.state, "arq", None):
             await app.state.arq.close()
+        if getattr(app.state, "redis", None):
+            try:
+                await app.state.redis.aclose()
+            except Exception:
+                pass
 
 
 app = FastAPI(lifespan=lifespan)

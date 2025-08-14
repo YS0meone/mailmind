@@ -48,9 +48,9 @@ interface MailDisplayProps {
 
 export function MailDisplay({ thread }: MailDisplayProps) {
   const today = new Date();
-  
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center p-2">
         <div className="flex items-center gap-2">
           <Tooltip>
@@ -187,8 +187,12 @@ export function MailDisplay({ thread }: MailDisplayProps) {
         </DropdownMenu>
       </div>
       <Separator />
-      <ThreadDisplay thread={thread} />
-      <MailReply email={thread?.emails[0] || null} />
+      <div className="flex-1 min-h-0">
+        <ThreadDisplay thread={thread} />
+      </div>
+      <div className="shrink-0 border-t">
+        <MailReply email={thread?.emails[0] || null} />
+      </div>
     </div>
   );
 }

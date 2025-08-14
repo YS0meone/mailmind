@@ -38,6 +38,7 @@ export function usePaginatedThreads(): UsePaginatedThreadsResult {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingRef = useRef(false);
 
+  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
   // Fetch data for the current page
   const params = new URLSearchParams({
     page: currentPage.toString(),
@@ -50,16 +51,29 @@ export function usePaginatedThreads(): UsePaginatedThreadsResult {
     isLoading,
     mutate
   } = useSWR<Thread[]>(
-    `http://localhost:8000/mail/threads?${params.toString()}`,
+    `${base}/mail/threads?${params.toString()}`,
     fetcher,
     {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 30000, // Cache for 30 seconds
+      // Frontend freshness strategy: revalidate on focus
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      dedupingInterval: 15000,
       errorRetryCount: 3,
       errorRetryInterval: 1000,
-      keepPreviousData: true, // Keep previous data while loading new data
-      refreshInterval: 0, // Disable auto refresh
+      keepPreviousData: true,
+      refreshInterval: 0,
+    }
+  );
+
+  // Independently poll page 1 and merge any new threads at the top
+  const { data: firstPage } = useSWR<Thread[]>(
+    `${base}/mail/threads?page=1&limit=${ITEMS_PER_PAGE}`,
+    fetcher,
+    {
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      refreshInterval: 30000,
+      dedupingInterval: 15000,
     }
   );
 
@@ -82,8 +96,8 @@ export function usePaginatedThreads(): UsePaginatedThreadsResult {
         // Subsequent pages - append to existing threads
         setAllThreads(prev => {
           // Avoid duplicates by filtering out threads that already exist
-          const existingIds = new Set(prev.map(thread => thread.id));
-          const newThreads = pageData.filter(thread => !existingIds.has(thread.id));
+      const existingIds = new Set(prev.map(thread => String(thread.id)));
+      const newThreads = pageData.filter(thread => !existingIds.has(String(thread.id)));
           console.log('New unique threads to add:', newThreads.length);
           return [...prev, ...newThreads];
         });
@@ -97,6 +111,17 @@ export function usePaginatedThreads(): UsePaginatedThreadsResult {
       loadingRef.current = false;
     }
   }, [pageData, currentPage]);
+
+  // Merge fresh page-1 items to the top without resetting pagination
+  useEffect(() => {
+    if (!firstPage || firstPage.length === 0) return;
+    setAllThreads(prev => {
+      const existingIds = new Set(prev.map(t => String(t.id)));
+      const newOnTop = firstPage.filter(t => !existingIds.has(String(t.id)));
+      if (newOnTop.length === 0) return prev;
+      return [...newOnTop, ...prev];
+    });
+  }, [firstPage]);
 
   // Load more function with debouncing
   const loadMore = useCallback(() => {
@@ -148,14 +173,14 @@ export function usePaginatedThreads(): UsePaginatedThreadsResult {
 
   // Remove a thread
   const removeThread = useCallback((threadId: number) => {
-    setAllThreads(prev => prev.filter(thread => thread.id !== threadId));
+    setAllThreads(prev => prev.filter(thread => String(thread.id) !== String(threadId)));
   }, []);
 
   // Update a specific thread
   const updateThread = useCallback((threadId: number, updates: Partial<Thread>) => {
     setAllThreads(prev => 
       prev.map(thread => 
-        thread.id === threadId 
+        String(thread.id) === String(threadId)
           ? { ...thread, ...updates }
           : thread
       )

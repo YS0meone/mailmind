@@ -17,6 +17,7 @@ from app.core.security import get_password_hash
 # import json
 # from pathlib import Path
 import asyncio
+from typing import Optional
 
 
 logger = get_logger(__name__)
@@ -100,6 +101,7 @@ async def init_sync_emails(user: DbUser):
     init_succeeded = False
     retry = 5
     try:
+        last_payload = None
         while not init_succeeded and retry > 0:
             logger.info("Starting email sync for user %s", user.accountId)
             response = await _request_with_retry(
@@ -109,8 +111,10 @@ async def init_sync_emails(user: DbUser):
                 params={
                     "daysWithin": user.syncDaysWithin or settings.AURINKO_SYNC_DAYS_WITHIN},
             )
+            payload = response.json()
+            last_payload = payload
             # we check if the response has a field called ready that is true
-            if response.json().get("ready", False):
+            if payload.get("ready", False):
                 init_succeeded = True
                 logger.info(
                     "Email sync initialization for user %s completed successfully", user.accountId)
@@ -120,7 +124,7 @@ async def init_sync_emails(user: DbUser):
                 # wait for 1 second before checking again
                 await sleep(1)
                 retry -= 1
-            return response.json()
+        return last_payload or {"ready": False}
     except httpx.HTTPStatusError as e:
         logger.error("HTTP error %s - %s",
                      e.response.status_code, e.response.text)
@@ -298,6 +302,45 @@ async def get_user_email_by_id(accountId: str) -> str | None:
                 status_code=500, detail="Failed to get user email due to request error")
 
 
+async def create_push_subscription(account_id: int, access_token: str) -> Optional[int]:
+    url = f"{settings.AURINKO_BASE_URL}/subscriptions"
+    # Use configured notification URL as-is; it should point directly to the webhook endpoint
+    notif_url = settings.AURINKO_NOTIFICATION_URL
+    body = {
+        "resource": "/email/messages",
+        "notificationUrl": notif_url,
+        "filters": ["withoutDrafts"],
+    }
+    try:
+        resp = await _request_with_retry(
+            "POST",
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "X-Aurinko-Account-Id": str(account_id),
+            },
+            json=body,
+        )
+        data = resp.json()
+        sub_id = data.get("id")
+        logger.info("Created Aurinko subscription %s for account %s",
+                    sub_id, account_id)
+        return sub_id
+    except httpx.HTTPStatusError as e:
+        detail = None
+        try:
+            detail = e.response.text
+        except Exception:
+            detail = str(e)
+        logger.error("Failed to create subscription for %s: %s",
+                     account_id, detail)
+        return None
+    except Exception as e:
+        logger.error("Failed to create subscription for %s: %s", account_id, e)
+        return None
+
+
 async def sync_emails(user: User):
     records = []
     async with AsyncSessionLocal() as session:
@@ -357,16 +400,7 @@ async def sync_emails(user: User):
                 f"Failed to sync emails and threads for user {updated_user.accountId}: {e}")
             # Don't raise here as this is a background task - just log the error
 
-        # Index emails for RAG chat functionality
-        try:
-            from app.services.rag_service import rag_service
-            await rag_service.index_user_emails(session, updated_user.email)
-            logger.info(
-                f"Successfully indexed emails for RAG for user {updated_user.email}")
-        except Exception as e:
-            logger.error(
-                f"Failed to index emails for RAG for user {updated_user.email}: {e}")
-            # Don't fail the sync if indexing fails
+        # RAG indexing disabled as requested
 
 
 # async def insert_all_email_records(records: list[dict]):
@@ -435,16 +469,15 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
 
     if not is_signup:
         try:
-            # Lazily create Arq pool if missing
-            if getattr(request.app.state, "arq", None) is None:
-                from arq.connections import create_pool
-                request.app.state.arq = await create_pool(request.app.state.redis_settings)
             await request.app.state.arq.enqueue_job("sync_emails_task", user.email)
             logger.info(
                 "Enqueued Arq job to sync emails for user %s", user.accountId)
         except Exception as e:
             logger.error(
                 f"Failed to enqueue sync job for user {user.accountId}: {e}")
+    else:
+        # For signup flow, create push subscription now; initial sync will start after completion
+        await create_push_subscription(user.accountId, user.accountToken)
 
     # return an access token and redirect to the frontend
     expire_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -503,6 +536,7 @@ async def get_current_user(session: SessionDep, user_email: TokenDep):
 @router.post("/login")
 async def login(
     session: SessionDep,
+    request: Request,
     email: str = Body(...),
     password: str = Body(...),
 ):
@@ -529,6 +563,12 @@ async def login(
             path="/",
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
+        # Enqueue a lightweight incremental sync on successful sign-in
+        try:
+            await request.app.state.arq.enqueue_job("sync_emails_task", email)
+        except Exception as e:
+            logger.error(f"Failed to enqueue sign-in sync for {email}: {e}")
+
         return response
     except HTTPException:
         raise
@@ -560,9 +600,6 @@ async def complete_signup(
         # Enqueue email sync via Arq worker instead of BackgroundTasks
         try:
             if request is not None:
-                if getattr(request.app.state, "arq", None) is None:
-                    from arq.connections import create_pool
-                    request.app.state.arq = await create_pool(request.app.state.redis_settings)
                 await request.app.state.arq.enqueue_job("sync_emails_task", db_user.email)
                 logger.info(
                     "Enqueued Arq job to sync emails for user %s after signup", db_user.accountId)

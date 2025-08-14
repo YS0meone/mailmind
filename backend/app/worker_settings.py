@@ -5,8 +5,8 @@ from app.core.db import AsyncSessionLocal
 from sqlalchemy import select
 from app.models import DbUser, User
 from app.logger_config import get_logger
-from app.crud import sync_emails_and_threads
-from app.api.routes.auth import init_sync_emails, increment_sync_updated
+from app.crud import sync_emails_and_threads, delete_emails_by_ids
+from app.api.routes.auth import init_sync_emails, increment_sync_updated, increment_sync_deleted
 from datetime import datetime, timezone
 
 logger = get_logger(__name__)
@@ -51,35 +51,51 @@ async def sync_emails_task(ctx, user_email: str):
                 accountId=db_user.accountId,
                 accountToken=db_user.accountToken,
                 email=db_user.email,
-                lastDeltaToken=db_user.lastDeltaToken,
+                lastUpdatedDeltaToken=db_user.lastUpdatedDeltaToken or db_user.lastDeltaToken,
+                lastDeletedDeltaToken=db_user.lastDeletedDeltaToken,
             )
-
-            # Initialize if first time
-            current_delta_token = db_user.lastDeltaToken
-            if not current_delta_token:
+            # Choose tokens: if stored tokens exist, reuse them; otherwise initialize
+            updated_token = user.lastUpdatedDeltaToken
+            deleted_token = user.lastDeletedDeltaToken
+            if not updated_token or not deleted_token:
                 token_response = await init_sync_emails(db_user)
                 if not token_response or not token_response.get("ready"):
                     logger.info(
                         "Email sync init not ready yet for %s", db_user.accountId)
                     return
-                current_delta_token = token_response.get("syncUpdatedToken")
+                updated_token = token_response.get("syncUpdatedToken")
+                deleted_token = token_response.get("syncDeletedToken")
 
             # Fetch updated records
             records: list[dict] = []
-            last_delta_token = await increment_sync_updated(
-                delta_token=current_delta_token,
+            last_updated_token = await increment_sync_updated(
+                delta_token=updated_token,
                 access_token=db_user.accountToken,
                 records=records,
             )
 
-            # Update lastDeltaToken
-            db_user.lastDeltaToken = last_delta_token
+            # Persist updated token
+            db_user.lastUpdatedDeltaToken = last_updated_token
+            await session.commit()
+
+            # Fetch deleted records since same delta token
+            deleted_ids: list[str] = []
+            last_deleted_token = await increment_sync_deleted(
+                delta_token=deleted_token,
+                access_token=db_user.accountToken,
+                deleted_ids=deleted_ids,
+            )
+            # Remove from DB
+            if deleted_ids:
+                await delete_emails_by_ids(session, deleted_ids)
+            # Persist deleted token
+            db_user.lastDeletedDeltaToken = last_deleted_token
             await session.commit()
 
             # Persist email records
-            await sync_emails_and_threads(session, records, db_user)
+            await sync_emails_and_threads(session, records, db_user, account_token=db_user.accountToken)
             logger.info(
-                "Synced %d email records and updated lastDeltaToken for user %s",
+                "Synced %d email records and updated tokens for user %s",
                 len(records),
                 db_user.accountId,
             )

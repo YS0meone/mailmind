@@ -12,6 +12,7 @@ from app.models import DbUser, Email, Thread
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from datetime import datetime
+from typing import Iterable
 
 logger = get_logger(__name__)
 
@@ -25,7 +26,10 @@ async def upsert_user(*, session: AsyncSession, user: User) -> DbUser | None:
         # if user exists, update the existing user
         db_user.accountId = user.accountId
         db_user.accountToken = user.accountToken
+        # Maintain legacy field while migrating
         db_user.lastDeltaToken = user.lastDeltaToken
+        db_user.lastUpdatedDeltaToken = user.lastUpdatedDeltaToken or db_user.lastUpdatedDeltaToken
+        db_user.lastDeletedDeltaToken = user.lastDeletedDeltaToken or db_user.lastDeletedDeltaToken
         await session.commit()
         await session.refresh(db_user)
         logger.info(f"Updated existing user: {db_user}")
@@ -36,7 +40,9 @@ async def upsert_user(*, session: AsyncSession, user: User) -> DbUser | None:
             accountId=user.accountId,
             accountToken=user.accountToken,
             email=user.email,
-            lastDeltaToken=user.lastDeltaToken
+            lastDeltaToken=user.lastDeltaToken,
+            lastUpdatedDeltaToken=user.lastUpdatedDeltaToken,
+            lastDeletedDeltaToken=user.lastDeletedDeltaToken,
         )
         session.add(new_user)
         await session.commit()
@@ -111,7 +117,6 @@ async def get_or_create_thread(session: AsyncSession, record: dict) -> DbThread:
 
     thread = DbThread(
         id=thread_id,  # Use converted integer ID
-        provider_id=record.get("threadId"),
         subject=record["subject"],
         lastMessageDate=received_at.replace(
             tzinfo=None) if received_at and received_at.tzinfo else received_at,
@@ -189,7 +194,7 @@ async def upsert_record(session: AsyncSession, record: dict, body: str | None = 
         text("SELECT address_id FROM address_has_threads WHERE thread_id = :thread_id"),
         {"thread_id": thread.id}
     )
-    current_address_ids = {row[0] for row in current_access_result.fetchall()}
+    current_address_ids = set(current_access_result.scalars().all())
 
     # Add new addresses to the association table
     for addr in access_addresses:
@@ -202,7 +207,7 @@ async def upsert_record(session: AsyncSession, record: dict, body: str | None = 
     session.add(email)
 
 
-async def sync_emails_and_threads(session: AsyncSession, records: list[dict], user: DbUser) -> None:
+async def sync_emails_and_threads(session: AsyncSession, records: list[dict], user: DbUser | None = None, account_token: str | None = None) -> None:
     """
     Sync emails and threads using the new logic that properly handles addresses_with_access.
     This replaces the old bulk upsert approach with a record-by-record approach that 
@@ -240,7 +245,7 @@ async def sync_emails_and_threads(session: AsyncSession, records: list[dict], us
                             response = await client.get(
                                 f"{settings.AURINKO_BASE_URL}/email/messages/{record['id']}",
                                 headers={
-                                    "Authorization": f"Bearer {user.accountToken}"}
+                                    "Authorization": f"Bearer {account_token or (user.accountToken if user else '')}"}
                             )
                             if response.status_code in retry_status:
                                 raise httpx.HTTPStatusError(
@@ -278,6 +283,32 @@ async def sync_emails_and_threads(session: AsyncSession, records: list[dict], us
     logger.info(
         f"Successfully synced {processed_count} email records with their threads and address relationships.")
 
+
+async def delete_emails_by_ids(session: AsyncSession, ids: Iterable[str]) -> int:
+    """Delete emails (and optionally cleanup) by provider ids that come from Aurinko.
+    Incoming ids are hex strings; map to integer primary keys.
+    Returns number of emails deleted.
+    """
+    # Convert to integer IDs and deduplicate
+    int_ids = []
+    for s in ids:
+        if not s:
+            continue
+        try:
+            int_ids.append(int(str(s), 16))
+        except Exception:
+            continue
+    if not int_ids:
+        return 0
+
+    # Delete emails by primary key; rely on ON DELETE constraints for FKs if configured
+    await session.execute(
+        text("DELETE FROM emails WHERE id = ANY(:ids)"),
+        {"ids": int_ids},
+    )
+    await session.commit()
+    logger.info(f"Deleted {len(int_ids)} emails from database")
+    return len(int_ids)
 
 '''
 curl -X GET -H 'Authorization: Bearer pL3FlLcng4Mbe2pIjHgxaILbUBwrPhGR4WC1touNEGU' \

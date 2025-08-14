@@ -50,7 +50,8 @@ export default function SignupCompletePage() {
         const detail = await resp.text();
         throw new Error(detail || "Failed to complete signup");
       }
-      window.location.href = "/inbox";
+      // Redirect to syncing page; the worker will run the initial sync
+      window.location.href = "/sync/loading";
     } catch (err: any) {
       setError(err?.message || "Failed to complete signup");
     } finally {

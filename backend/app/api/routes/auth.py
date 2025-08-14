@@ -120,7 +120,7 @@ async def init_sync_emails(user: DbUser):
                 # wait for 1 second before checking again
                 await sleep(1)
                 retry -= 1
-        return response.json()
+            return response.json()
     except httpx.HTTPStatusError as e:
         logger.error("HTTP error %s - %s",
                      e.response.status_code, e.response.text)
@@ -205,6 +205,74 @@ async def increment_sync_updated(delta_token: str, access_token: str, records: l
         logger.error("Request failed: %s", e)
         raise HTTPException(
             status_code=500, detail="Failed to increment sync updated count due to request error")
+
+
+async def increment_sync_deleted(delta_token: str, access_token: str, deleted_ids: list[str]) -> str:
+    logger.info("sync deleted emails incrementally for token: %s", delta_token)
+    deleted_url = f"{settings.AURINKO_BASE_URL}/email/sync/deleted"
+    current_delta_token = delta_token
+    try:
+        while current_delta_token:
+            response = await _request_with_retry(
+                "GET",
+                deleted_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"deltaToken": current_delta_token},
+            )
+            logger.info(
+                "response received for deleted with delta token: %s", current_delta_token)
+            data = response.json()
+
+            next_delta_token = data.get("nextDeltaToken")
+            page_token = data.get("nextPageToken")
+
+            batch = data.get("records", []) or []
+            for item in batch:
+                if item.get("id"):
+                    deleted_ids.append(item["id"])
+            logger.info("Fetched %d deleted records", len(batch))
+
+            while page_token:
+                logger.info(
+                    "Fetching next page of deleted with page token: %s", page_token)
+                response = await _request_with_retry(
+                    "GET",
+                    deleted_url,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"pageToken": page_token},
+                )
+                p = response.json()
+                page_token = p.get("nextPageToken")
+                pbatch = p.get("records", []) or []
+                for item in pbatch:
+                    if item.get("id"):
+                        deleted_ids.append(item["id"])
+                logger.info(
+                    "Fetched %d additional deleted records", len(pbatch))
+                if p.get("nextDeltaToken"):
+                    next_delta_token = p["nextDeltaToken"]
+
+            logger.info("Deleted sync for delta token %s completed with %d total deleted",
+                        current_delta_token, len(deleted_ids))
+
+            if not next_delta_token or next_delta_token == current_delta_token:
+                logger.info(
+                    "No more deleted updates available. Breaking loop.")
+                break
+
+            current_delta_token = next_delta_token
+
+        logger.info("All deleted items synced successfully for user")
+        return current_delta_token
+    except httpx.HTTPStatusError as e:
+        logger.error("HTTP error %s - %s",
+                     e.response.status_code, e.response.text)
+        raise HTTPException(status_code=e.response.status_code,
+                            detail="Failed to increment sync deleted count due to HTTP error")
+    except httpx.RequestError as e:
+        logger.error("Request failed: %s", e)
+        raise HTTPException(
+            status_code=500, detail="Failed to increment sync deleted count due to request error")
 
 
 async def get_user_email_by_id(accountId: str) -> str | None:
@@ -345,6 +413,16 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
         email=user_email,
     )
 
+    # Ensure the user exists in DB so signup completion can update settings
+    try:
+        await upsert_user(session=session, user=user)
+        logger.info("User %s upserted during callback", user.email)
+    except Exception as e:
+        logger.error(
+            f"Failed to upsert user during callback for {user.email}: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to persist user during auth callback")
+
     # If this was a signup, don't sync yet; let the user finish config first
     is_signup = False
     try:
@@ -414,7 +492,8 @@ async def get_current_user(session: SessionDep, user_email: TokenDep):
             accountId=db_user.accountId,
             accountToken=db_user.accountToken,
             email=db_user.email,
-            lastDeltaToken=db_user.lastDeltaToken
+            lastUpdatedDeltaToken=db_user.lastUpdatedDeltaToken or db_user.lastDeltaToken,
+            lastDeletedDeltaToken=db_user.lastDeletedDeltaToken,
         )
     except Exception as e:
         logger.error(f"Error fetching current user: {e}")

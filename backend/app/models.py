@@ -30,13 +30,19 @@ class DbUser(Base):
     accountId: Mapped[int] = mapped_column()
     accountToken: Mapped[str] = mapped_column(nullable=False)
     email: Mapped[str] = mapped_column(nullable=False, unique=True)
+    # Deprecated: replaced by lastUpdatedDeltaToken/lastDeletedDeltaToken, kept for backward compatibility
     lastDeltaToken: Mapped[Optional[str]] = mapped_column(nullable=True)
+    lastUpdatedDeltaToken: Mapped[Optional[str]] = mapped_column(nullable=True)
+    lastDeletedDeltaToken: Mapped[Optional[str]] = mapped_column(nullable=True)
     passwordHash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     syncDaysWithin: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True)
 
     def __repr__(self):
-        return f"<DbUser(id={self.id}, accountId={self.accountId}, email={self.email}, lastDeltaToken={self.lastDeltaToken})>"
+        return (
+            f"<DbUser(id={self.id}, accountId={self.accountId}, email={self.email}, "
+            f"lastUpdatedDeltaToken={self.lastUpdatedDeltaToken}, lastDeletedDeltaToken={self.lastDeletedDeltaToken})>"
+        )
 
 
 class DbEmailAddress(Base):
@@ -202,6 +208,10 @@ class User(BaseModel):
     accountId: int
     accountToken: str
     email: str
+    # New token fields
+    lastUpdatedDeltaToken: Optional[str] = None
+    lastDeletedDeltaToken: Optional[str] = None
+    # Deprecated for backward compatibility (not used going forward)
     lastDeltaToken: Optional[str] = None
 
     def __repr__(self):

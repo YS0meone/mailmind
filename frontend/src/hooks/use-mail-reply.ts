@@ -15,10 +15,7 @@ export function useMailReply(): UseMailReplyProps {
     setError(null);
 
     try {
-      const rawBaseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL ?? "http://localhost:8000";
-      // Normalize in case env includes a trailing slash or '/api'
-      const trimmed = rawBaseUrl.replace(/\/+$/, "");
-      const baseUrl = trimmed.replace(/\/api$/, "");
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
       const url = `${baseUrl}/mail/thread/${messageID}/reply`;
       const response = await fetch(url, {
         method: "POST",

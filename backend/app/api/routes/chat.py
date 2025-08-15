@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from app.api.dep import SessionDep, TokenDep
-from app.services.rag_service import rag_service
 from app.logger_config import get_logger
+from app.services.chat_graph import chat_app, llm_test
+from fastapi.responses import StreamingResponse
+import json
 
 logger = get_logger(__name__)
 
@@ -34,45 +36,30 @@ class ChatResponse(BaseModel):
 async def chat_with_emails(
     chat_message: ChatMessage,
     session: SessionDep,
-    user_email: TokenDep
+    user_email: TokenDep,
 ):
-    """Chat with your emails using AI"""
+    """Chat with your emails using AI via LangGraph RAG."""
     try:
         logger.info(f"Chat request from {user_email}: {chat_message.message}")
-
-        # Retrieve relevant emails
-        relevant_emails = rag_service.query_emails(
-            user_email=user_email,
-            query=chat_message.message,
-            limit=5
+        result = await chat_app.ainvoke({"query": chat_message.message, "user_email": user_email})
+        ans = (result.get("answer", "") or "")
+        logger.info(
+            "Chat answer ready len=%d preview=%s",
+            len(ans),
+            ans[:200].replace("\n", " ")
         )
-
-        logger.info(f"Found {len(relevant_emails)} relevant emails")
-
-        # Generate AI response
-        ai_response = await rag_service.generate_response(
-            user_query=chat_message.message,
-            relevant_emails=relevant_emails
-        )
-
-        # Prepare sources for frontend
         sources = [
             EmailSource(
-                email_id=email["email_id"],
-                thread_id=email["thread_id"],
-                subject=email["subject"],
-                from_address=email["from_address"],
-                from_name=email["from_name"],
-                sent_at=email["sent_at"]
+                email_id=str(s.get("email_id")),
+                thread_id=str(s.get("thread_id")),
+                subject=s.get("subject", ""),
+                from_address="",
+                from_name="",
+                sent_at=str(s.get("sent_at", "")),
             )
-            for email in relevant_emails
+            for s in result.get("sources", [])
         ]
-
-        return ChatResponse(
-            response=ai_response,
-            sources=sources
-        )
-
+        return ChatResponse(response=ans, sources=sources)
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
         raise HTTPException(
@@ -84,17 +71,44 @@ async def chat_with_emails(
 
 @router.get("/status")
 async def get_chat_status(user_email: TokenDep):
-    """Get chat service status for the user"""
+    """Simple readiness indicator for chat (checks for API key)."""
     try:
-        indexed_count = len(rag_service.indexed_emails.get(user_email, []))
-        has_openai_key = bool(rag_service.openai_api_key)
-
-        return {
-            "indexed_emails": indexed_count,
-            "ai_enabled": has_openai_key,
-            "status": "ready" if has_openai_key and indexed_count > 0 else "not_ready"
-        }
+        from app.core.config import settings
+        has_openai_key = bool(settings.OPENAI_API_KEY)
+        return {"ai_enabled": has_openai_key, "status": "ready" if has_openai_key else "not_ready"}
     except Exception as e:
         logger.error(f"Error getting chat status: {e}")
         raise HTTPException(
             status_code=500, detail="Error getting chat status")
+
+
+@router.post("/stream")
+async def chat_stream(
+    chat_message: ChatMessage,
+    session: SessionDep,
+    user_email: TokenDep,
+):
+    """Stream a chat response (JSON lines)."""
+    async def gen():
+        try:
+            logger.info(f"Chat stream request from {user_email}: {chat_message.message}")
+            result = await chat_app.ainvoke({"query": chat_message.message, "user_email": user_email})
+            ans = (result.get("answer", "") or "")
+            logger.info(
+                "Chat stream final len=%d preview=%s",
+                len(ans),
+                ans[:200].replace("\n", " ")
+            )
+            yield json.dumps({"type": "final", "data": {"answer": ans, "sources": result.get("sources", [])}}) + "\n"
+        except Exception as e:
+            logger.error(f"Error in chat stream endpoint: {e}")
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/json")
+
+
+@router.get("/health")
+async def chat_health():
+    """Basic LLM health check; returns a short model response."""
+    out = llm_test("Say 'pong' if you can read this.")
+    return {"ok": bool(out), "answer": out[:200]}

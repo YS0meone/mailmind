@@ -8,8 +8,17 @@ from app.logger_config import get_logger
 from app.crud import sync_emails_and_threads, delete_emails_by_ids
 from app.api.routes.auth import init_sync_emails, increment_sync_updated, increment_sync_deleted
 from datetime import datetime, timezone
+import asyncio
+from langchain_core.documents import Document
+from app.services.vector_store import get_vector_store
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = get_logger(__name__)
+
+
+def _unused():
+    # placeholder to keep import grouping consistent
+    return None
 
 
 async def acquire_user_lock(redis, account_id: str) -> bool:
@@ -91,6 +100,15 @@ async def sync_emails_task(ctx, user_email: str):
             # Persist deleted token
             db_user.lastDeletedDeltaToken = last_deleted_token
             await session.commit()
+            # Remove from vector store (Chroma) by metadata filter
+            try:
+                if deleted_ids:
+                    store = get_vector_store()
+                    where = {"user_email": db_user.email,
+                             "email_id": {"$in": deleted_ids}}
+                    await asyncio.to_thread(store.delete, where=where)
+            except Exception:
+                pass
 
             # Persist email records
             await sync_emails_and_threads(session, records, db_user, account_token=db_user.accountToken)
@@ -99,6 +117,56 @@ async def sync_emails_task(ctx, user_email: str):
                 len(records),
                 db_user.accountId,
             )
+            # Index into Chroma vector store using LangChain Documents
+            try:
+                if records:
+                    store = get_vector_store()
+                    docs: list[Document] = []
+                    for r in records:
+                        text = ((r.get("subject") or "") + "\n" +
+                                (r.get("body") or r.get("bodySnippet") or "")).strip()
+                        if not text:
+                            continue
+                        meta = {
+                            "user_email": db_user.email,
+                            "email_id": r.get("id"),
+                            "thread_id": r.get("threadId"),
+                            "subject": r.get("subject") or "",
+                            "snippet": r.get("bodySnippet") or "",
+                            "sent_at": r.get("sentAt") or "",
+                        }
+                        docs.append(Document(page_content=text, metadata=meta))
+                    docs_splitter = RecursiveCharacterTextSplitter(
+                        # Set a really small chunk size, just to show.
+                        chunk_size=1500,
+                        chunk_overlap=150,
+                        length_function=len,
+                        is_separator_regex=False,
+                    )
+                    docs_split = docs_splitter.split_documents(docs)
+                    logger.info(
+                        "Indexed %d docs and persisted for %s", len(
+                            docs_split), db_user.email
+                    )
+                    await store.aadd_documents(documents=docs_split)
+                    logger.info("Added %d docs to vector store", len(docs_split))
+
+                    # if docs:
+                    #     await asyncio.to_thread(store.add_documents, docs)
+                    #     # Ensure data is flushed to disk so other processes (API) can read it
+                    #     try:
+                    #         await asyncio.to_thread(store.persist)
+                    #     except Exception:
+                    #         pass
+                    #     logger.info(
+                    #         "Indexed %d docs and persisted for %s", len(
+                    #             docs), db_user.email
+                    #     )
+            except Exception as e:
+                logger.error("Vector indexing failed: %s", e)
+
+            # (Removed legacy PGVector indexing path)
+
             # update status to done
             await redis.hset(
                 f"sync:status:{user_email}",

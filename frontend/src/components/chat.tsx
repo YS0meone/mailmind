@@ -68,12 +68,17 @@ export function Chat({ onEmailSelect }: ChatProps) {
 
   const checkChatStatus = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/chat/status`, {
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+        }/chat/status`,
+        {
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.ok) {
         const status = await response.json();
@@ -92,13 +97,18 @@ export function Chat({ onEmailSelect }: ChatProps) {
 
   const indexEmails = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/chat/index`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+        }/chat/index`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.ok) {
         // Refresh status after indexing
@@ -125,26 +135,43 @@ export function Chat({ onEmailSelect }: ChatProps) {
     setError(null);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/chat/`, {
+      const base = (
+        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+      ).replace(/\/$/, "");
+      const resp = await fetch(`${base}/chat/stream`, {
         method: "POST",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: input }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage.content }),
       });
+      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const lines: string[] = [];
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, idx).trim();
+          buffer = buffer.slice(idx + 1);
+          if (line) lines.push(line);
+        }
       }
-
-      const data = await response.json();
+      const last = lines.pop();
+      const payload = last
+        ? JSON.parse(last)
+        : { type: "final", data: { answer: "", sources: [] } };
+      const data = payload.data || {};
 
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: "assistant",
-        content: data.response,
-        sources: data.sources,
+        content: data.answer || "",
+        sources: data.sources || [],
         timestamp: new Date(),
       };
 

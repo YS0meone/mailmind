@@ -109,3 +109,5 @@ venv.bak/
 .mypy_cache/
 
 .idea/*
+
+chroma_langchain_db/

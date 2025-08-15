@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # OpenAI/AI related
     OPENAI_API_KEY: str
     OPENAI_MODEL: str
+    EMBEDDING_MODEL: str
+    EMBEDDING_DIM: int
 
     # Task queue / Redis
     # Use 127.0.0.1 to avoid IPv6 localhost resolution issues on Windows

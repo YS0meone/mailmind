@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 export function LoginForm({
   className,
@@ -36,8 +38,40 @@ export function LoginForm({
         body: JSON.stringify({ email, password }),
       });
       if (!resp.ok) {
-        const detail = await resp.text();
-        throw new Error(detail || "Login failed");
+        const contentType = resp.headers.get("content-type") || "";
+        let message = "Login failed";
+        try {
+          if (contentType.includes("application/json")) {
+            const data: any = await resp.json();
+            if (typeof (data as any)?.detail === "string") {
+              message = (data as any).detail;
+            } else if (Array.isArray((data as any)?.detail)) {
+              message = (data as any).detail
+                .map((d: any) => d?.msg || d?.message || JSON.stringify(d))
+                .join(", ");
+            } else if (typeof (data as any)?.message === "string") {
+              message = (data as any).message;
+            } else if (typeof (data as any)?.error === "string") {
+              message = (data as any).error;
+            } else if (typeof data === "string") {
+              message = data;
+            } else {
+              message = JSON.stringify(data);
+            }
+          } else {
+            const text = await resp.text();
+            message = text || message;
+          }
+        } catch {
+          // ignore parse errors and use default message
+        }
+        if (
+          resp.status === 401 &&
+          (message === "Login failed" || message.includes("{"))
+        ) {
+          message = "Invalid email or password";
+        }
+        throw new Error(message);
       }
       window.location.href = "/inbox";
     } catch (err: any) {
@@ -86,7 +120,13 @@ export function LoginForm({
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </div>
-                {error && <div className="text-sm text-red-600">{error}</div>}
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle />
+                    <AlertTitle>Login failed</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Logging in..." : "Login"}
                 </Button>

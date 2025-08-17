@@ -7,6 +7,7 @@ import {
   AlertCircle,
   Archive,
   ArchiveX,
+  Loader2,
   File,
   Inbox,
   MessagesSquare,
@@ -29,6 +30,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { MailDisplay } from "@/components/mail-display";
 import { MailList } from "@/components/mail-list";
 import { Nav } from "@/components/nav";
@@ -134,38 +142,26 @@ export function MailPage({
   };
 
   if (isLoading) {
-    return (
-      <div className="relative flex h-full items-center justify-center p-6">
-        <div className="w-full max-w-lg rounded-xl border bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/60 p-8 shadow-sm text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+  return (
+    <div className="relative flex min-h-screen items-center justify-center p-6">
+      <Card className="w-full max-w-lg text-center border-none shadow-none">
+        <CardHeader className="items-center text-center">
+          <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Inbox className="h-7 w-7 text-primary" />
           </div>
-          <h2 className="text-xl font-semibold">Loading your inbox</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <CardTitle className="text-xl">Loading your inbox</CardTitle>
+          <CardDescription>
             Fetching your latest emails. This should only take a moment.
-          </p>
-          <div className="mt-5 flex flex-col items-center gap-3">
-            <div className="h-2 w-56 overflow-hidden rounded-full bg-muted">
-              <div className="h-full w-1/3 animate-[progress_1.2s_ease-in-out_infinite] rounded-full bg-primary" />
-            </div>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="mt-2 flex flex-col items-center gap-3" aria-busy>
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <p className="text-xs text-muted-foreground">Preparing threads…</p>
           </div>
-        </div>
-
-        <style jsx>{`
-          @keyframes progress {
-            0% {
-              transform: translateX(-100%);
-            }
-            50% {
-              transform: translateX(20%);
-            }
-            100% {
-              transform: translateX(120%);
-            }
-          }
-        `}</style>
-      </div>
+        </CardContent>
+      </Card>
+    </div>
     );
   }
 

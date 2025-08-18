@@ -28,7 +28,7 @@ async def aurinko_webhook(request: Request):
     token = request.query_params.get("validationToken")
     if token:
         return Response(content=token, media_type="text/plain")
-
+    logger.info("Received Aurinko webhook")
     # Verify signature
     ts = request.headers.get("X-Aurinko-Request-Timestamp")
     sig = request.headers.get("X-Aurinko-Signature")

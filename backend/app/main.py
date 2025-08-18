@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from app.api.main import api_router
 from app.core.config import settings
 from .logger_config import setup_logging
@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from arq.connections import create_pool, RedisSettings
 import redis.asyncio as redis
 from contextlib import asynccontextmanager
+from sqlalchemy import text
+from app.core.db import engine
 
 setup_logging()
 
@@ -44,3 +46,25 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readyz(request: Request) -> dict[str, str]:
+    try:
+        # Check Redis
+        if getattr(request.app.state, "redis", None) is None:
+            raise RuntimeError("redis not initialized")
+        await request.app.state.redis.ping()
+
+        # Check DB
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+
+        return {"status": "ready"}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=f"not ready: {exc}")

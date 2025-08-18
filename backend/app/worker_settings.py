@@ -96,6 +96,7 @@ async def sync_emails_task(ctx, user_email: str):
             )
             # Remove from DB
             if deleted_ids:
+                logger.info("Deleting %d emails for %s", len(deleted_ids), db_user.email)
                 await delete_emails_by_ids(session, deleted_ids)
             # Persist deleted token
             db_user.lastDeletedDeltaToken = last_deleted_token

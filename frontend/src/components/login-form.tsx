@@ -40,31 +40,8 @@ export function LoginForm({
       if (!resp.ok) {
         const contentType = resp.headers.get("content-type") || "";
         let message = "Login failed";
-        try {
-          if (contentType.includes("application/json")) {
-            const data: any = await resp.json();
-            if (typeof (data as any)?.detail === "string") {
-              message = (data as any).detail;
-            } else if (Array.isArray((data as any)?.detail)) {
-              message = (data as any).detail
-                .map((d: any) => d?.msg || d?.message || JSON.stringify(d))
-                .join(", ");
-            } else if (typeof (data as any)?.message === "string") {
-              message = (data as any).message;
-            } else if (typeof (data as any)?.error === "string") {
-              message = (data as any).error;
-            } else if (typeof data === "string") {
-              message = data;
-            } else {
-              message = JSON.stringify(data);
-            }
-          } else {
-            const text = await resp.text();
-            message = text || message;
-          }
-        } catch {
-          // ignore parse errors and use default message
-        }
+        const data = await resp.json();
+        message = data.detail;
         if (
           resp.status === 401 &&
           (message === "Login failed" || message.includes("{"))

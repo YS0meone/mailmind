@@ -117,29 +117,6 @@ export function Chat({ onEmailSelect }: ChatProps) {
     checkChatStatus();
   }, [checkChatStatus]);
 
-  const indexEmails = async () => {
-    try {
-      const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-        }/chat/index`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        // Refresh status after indexing
-        await checkChatStatus();
-      }
-    } catch (error) {
-      console.error("Error indexing emails:", error);
-    }
-  };
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;

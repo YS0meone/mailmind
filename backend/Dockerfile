@@ -36,10 +36,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Runtime deps for psycopg2
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy virtualenv from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy backend source
+# Copy Alembic config and backend source
+COPY alembic.ini ./alembic.ini
 COPY app ./app
 
 # Add a non-root user

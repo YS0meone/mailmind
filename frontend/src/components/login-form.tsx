@@ -38,7 +38,6 @@ export function LoginForm({
         body: JSON.stringify({ email, password }),
       });
       if (!resp.ok) {
-        const contentType = resp.headers.get("content-type") || "";
         let message = "Login failed";
         const data = await resp.json();
         message = data.detail;

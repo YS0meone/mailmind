@@ -35,7 +35,8 @@ function MailItem({ index, style, data }: MailItemProps) {
     data;
 
   // Check if this is the loading item
-  if (index >= items.length) {
+  const isLoadingItem = index >= items.length;
+  if (isLoadingItem) {
     // This is the loading/end indicator
     return (
       <div style={style} className="flex justify-center items-center p-4">
@@ -56,11 +57,13 @@ function MailItem({ index, style, data }: MailItemProps) {
   const item = items[index];
 
   // Trigger load more when near the end
+  const nearEnd = index === items.length - 5;
   useEffect(() => {
-    if (index === items.length - 5 && hasMore && !isLoading) {
+    if (nearEnd && hasMore && !isLoading) {
       onLoadMore();
     }
-  }, [index, items.length, hasMore, isLoading, onLoadMore]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearEnd, hasMore, isLoading]);
 
   return (
     <div style={style} className="px-4 py-2">
@@ -68,9 +71,9 @@ function MailItem({ index, style, data }: MailItemProps) {
         key={item.id}
         className={cn(
           "flex flex-col items-start gap-2 rounded-lg border p-3 text-left text-sm transition-all hover:bg-accent w-full",
-          selectedId === item.id && "bg-muted"
+          selectedId === Number(item.id) && "bg-muted"
         )}
-        onClick={() => handleClick(item.id)}
+        onClick={() => handleClick(Number(item.id))}
       >
         <div className="flex w-full flex-col gap-1">
           <div className="flex items-center">
@@ -83,7 +86,7 @@ function MailItem({ index, style, data }: MailItemProps) {
             <div
               className={cn(
                 "ml-auto text-xs",
-                selectedId === item.id
+                selectedId === Number(item.id)
                   ? "text-foreground"
                   : "text-muted-foreground"
               )}

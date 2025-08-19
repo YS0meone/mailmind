@@ -3,21 +3,7 @@
 import * as React from "react";
 import { usePaginatedThreads } from "@/hooks/use-paginated-threads";
 import { useMailSearch } from "@/hooks/use-mail-search";
-import {
-  AlertCircle,
-  Archive,
-  ArchiveX,
-  Loader2,
-  File,
-  Inbox,
-  MessagesSquare,
-  Search,
-  Send,
-  ShoppingCart,
-  Trash2,
-  Users,
-  RefreshCw,
-} from "lucide-react";
+import { Loader2, File, Inbox, Search, Send, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -142,26 +128,28 @@ export function MailPage({
   };
 
   if (isLoading) {
-  return (
-    <div className="relative flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-lg text-center border-none shadow-none">
-        <CardHeader className="items-center text-center">
-          <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-            <Inbox className="h-7 w-7 text-primary" />
-          </div>
-          <CardTitle className="text-xl">Loading your inbox</CardTitle>
-          <CardDescription>
-            Fetching your latest emails. This should only take a moment.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mt-2 flex flex-col items-center gap-3" aria-busy>
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-xs text-muted-foreground">Preparing threads…</p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    return (
+      <div className="relative flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-lg text-center border-none shadow-none">
+          <CardHeader className="items-center text-center">
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+              <Inbox className="h-7 w-7 text-primary" />
+            </div>
+            <CardTitle className="text-xl">Loading your inbox</CardTitle>
+            <CardDescription>
+              Fetching your latest emails. This should only take a moment.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mt-2 flex flex-col items-center gap-3" aria-busy>
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <p className="text-xs text-muted-foreground">
+                Preparing threads…
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

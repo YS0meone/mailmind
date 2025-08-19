@@ -80,8 +80,30 @@ export function Chat({ onEmailSelect }: ChatProps) {
         setChatStatus(status);
 
         if (status.indexed_emails === 0) {
-          // Try to index emails
-          await indexEmails();
+          // Try to index emails directly here to avoid cyclic deps
+          await fetch(
+            `${
+              process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+            }/chat/index`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          // Then refresh status
+          const refreshed = await fetch(
+            `${
+              process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+            }/chat/status`,
+            {
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+          if (refreshed.ok) setChatStatus(await refreshed.json());
         }
       }
     } catch (error) {

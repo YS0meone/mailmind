@@ -19,7 +19,7 @@ interface UsePaginatedThreadsResult {
   threads: Thread[];
   isLoading: boolean;
   isLoadingMore: boolean;
-  error: any;
+  error: Error | undefined;
   hasMore: boolean;
   loadMore: () => void;
   refresh: () => void;
@@ -110,7 +110,7 @@ export function usePaginatedThreads(): UsePaginatedThreadsResult {
       setIsLoadingMore(false);
       loadingRef.current = false;
     }
-  }, [pageData, currentPage]);
+  }, [pageData, currentPage, error, isLoading]);
 
   // Merge fresh page-1 items to the top without resetting pagination
   useEffect(() => {

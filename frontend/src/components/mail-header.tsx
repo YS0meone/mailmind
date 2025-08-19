@@ -10,8 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ComposeDialog } from "@/components/compose-dialog";
-import { Moon, Sun, Monitor, Plus, User, Settings, LogOut } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Moon, Sun, Monitor, Plus, Settings, LogOut } from "lucide-react";
 
 interface MailHeaderProps {
   isCollapsed: boolean;

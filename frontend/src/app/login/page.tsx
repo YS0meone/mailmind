@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
 import { Mail } from "lucide-react";
 

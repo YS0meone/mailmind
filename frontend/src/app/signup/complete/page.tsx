@@ -52,8 +52,10 @@ export default function SignupCompletePage() {
       }
       // Redirect to syncing page; the worker will run the initial sync
       window.location.href = "/sync/loading";
-    } catch (err: any) {
-      setError(err?.message || "Failed to complete signup");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to complete signup";
+      setError(message);
     } finally {
       setLoading(false);
     }

@@ -491,13 +491,14 @@ async def aurinko_final_callback(code: str, state: str, session: SessionDep, bac
 
     # set http-only cookie with the access token
     response = RedirectResponse(url=redirect_url, status_code=307)
-    cookie_domain = urlparse(settings.FRONTEND_URL).hostname
+    cookie_domain = urlparse(settings.BACKEND_URL).hostname
+    same_site = "None" if not settings.DEBUG else "Lax"
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         secure=not settings.DEBUG,
-        samesite="Lax",  # Adjust as needed
+        samesite=same_site,  # None in prod to allow cross-site cookie
         domain=cookie_domain,
         path="/",
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
@@ -552,13 +553,14 @@ async def login(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(email, expire_minutes)
         response = JSONResponse({"message": "Logged in"})
-        cookie_domain = urlparse(settings.FRONTEND_URL).hostname
+        cookie_domain = urlparse(settings.BACKEND_URL).hostname
+        same_site = "None" if not settings.DEBUG else "Lax"
         response.set_cookie(
             key="access_token",
             value=access_token,
             httponly=True,
             secure=not settings.DEBUG,
-            samesite="Lax",
+            samesite=same_site,
             domain=cookie_domain,
             path="/",
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
@@ -618,12 +620,13 @@ async def complete_signup(
 @router.post("/logout")
 async def logout():
     response = JSONResponse({"message": "Logged out"})
-    cookie_domain = urlparse(settings.FRONTEND_URL).hostname
+    cookie_domain = urlparse(settings.BACKEND_URL).hostname
+    same_site = "None" if not settings.DEBUG else "Lax"
     response.delete_cookie(
         key="access_token",
         path="/",
         domain=cookie_domain,
-        samesite="Lax",
+        samesite=same_site,
         secure=not settings.DEBUG,
         httponly=True,
     )

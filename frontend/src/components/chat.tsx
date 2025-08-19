@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -61,12 +61,7 @@ export function Chat({ onEmailSelect }: ChatProps) {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    // Check chat status on component mount
-    checkChatStatus();
-  }, []);
-
-  const checkChatStatus = async () => {
+  const checkChatStatus = useCallback(async () => {
     try {
       const response = await fetch(
         `${
@@ -93,7 +88,12 @@ export function Chat({ onEmailSelect }: ChatProps) {
       console.error("Error checking chat status:", error);
       setError("Failed to check chat status");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Check chat status on component mount
+    checkChatStatus();
+  }, [checkChatStatus]);
 
   const indexEmails = async () => {
     try {
@@ -260,10 +260,10 @@ export function Chat({ onEmailSelect }: ChatProps) {
                   <div className="text-sm mt-2 space-y-1">
                     <p>Try asking:</p>
                     <div className="space-y-1">
-                      <p>• "Show me emails from last week"</p>
-                      <p>• "Find emails about project updates"</p>
-                      <p>• "What are my unread emails about?"</p>
-                      <p>• "Summarize my emails from today"</p>
+                      <p>• &quot;Show me emails from last week&quot;</p>
+                      <p>• &quot;Find emails about project updates&quot;</p>
+                      <p>• &quot;What are my unread emails about?&quot;</p>
+                      <p>• &quot;Summarize my emails from today&quot;</p>
                     </div>
                   </div>
                 </div>

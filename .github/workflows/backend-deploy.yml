@@ -1,0 +1,97 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-deploy.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: cloud-run-backend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION }} # e.g. us-central1
+  REPOSITORY: ${{ secrets.GAR_REPOSITORY }} # e.g. mailmind
+  SERVICE_API: ${{ secrets.CLOUD_RUN_SERVICE_NAME_API }} # e.g. mailmind-api
+  SERVICE_WORKER: ${{ secrets.CLOUD_RUN_SERVICE_NAME_WORKER }} # e.g. mailmind-worker
+  IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPOSITORY }}/mailmind:${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ secrets.GCP_REGION }}
+      REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
+      SERVICE_API: ${{ secrets.CLOUD_RUN_SERVICE_NAME_API }}
+      SERVICE_WORKER: ${{ secrets.CLOUD_RUN_SERVICE_NAME_WORKER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Auth to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Compute IMAGE
+        run: echo "IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/mailmind:${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev -q
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t "$IMAGE" backend
+
+      - name: Push image
+        run: docker push "$IMAGE"
+
+      - name: Create/Update migration job
+        run: |
+          gcloud run jobs describe migrate --region "$REGION" >/dev/null 2>&1 && \
+          gcloud run jobs update migrate \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --command bash \
+            --args -lc,alembic\ -c\ alembic.ini\ upgrade\ head \
+            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}" \
+          || gcloud run jobs create migrate \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --command bash \
+            --args -lc,alembic\ -c\ alembic.ini\ upgrade\ head \
+            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}"
+
+      - name: Run migrations
+        run: gcloud run jobs execute migrate --region "$REGION" --wait
+
+      - name: Deploy API
+        run: |
+          gcloud run deploy "$SERVICE_API" \
+            --image "$IMAGE" \
+            --platform managed \
+            --region "$REGION" \
+            --allow-unauthenticated \
+            --port 8000 \
+            --set-env-vars "FRONTEND_URL=${{ secrets.FRONTEND_URL }},BACKEND_URL=${{ secrets.BACKEND_URL }},DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }},ACCESS_TOKEN_EXPIRE_MINUTES=60,DEBUG=false" \
+            --quiet
+
+      - name: Deploy Worker
+        run: |
+          gcloud run deploy "$SERVICE_WORKER" \
+            --image "$IMAGE" \
+            --platform managed \
+            --region "$REGION" \
+            --command arq \
+            --args app.worker_settings.WorkerSettings \
+            --min-instances 0 \
+            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }},BACKEND_URL=${{ secrets.BACKEND_URL }},DEBUG=false" \
+            --quiet

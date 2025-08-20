@@ -72,14 +72,12 @@ jobs:
             --command /opt/venv/bin/python \
             --args=-m,alembic,-c,/app/alembic.ini,upgrade,head \
             --env-vars-file backend/cloudrun.env.yaml \
-            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}" \
           || gcloud run jobs create migrate \
             --image "$IMAGE" \
             --region "$REGION" \
             --command /opt/venv/bin/python \
             --args=-m,alembic,-c,/app/alembic.ini,upgrade,head \
             --env-vars-file backend/cloudrun.env.yaml \
-            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}"
 
       - name: Run migrations
         run: gcloud run jobs execute migrate --region "$REGION" --wait
@@ -93,7 +91,6 @@ jobs:
             --allow-unauthenticated \
             --port 8000 \
             --env-vars-file backend/cloudrun.env.yaml \
-            --set-env-vars "FRONTEND_URL=${{ secrets.FRONTEND_URL }},BACKEND_URL=${{ secrets.BACKEND_URL }},DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }},ACCESS_TOKEN_EXPIRE_MINUTES=60,DEBUG=false,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},AURINKO_SIGNING_SECRET=${{ secrets.AURINKO_SIGNING_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }},AURINKO_CLIENT_ID=${{ secrets.AURINKO_CLIENT_ID }},AURINKO_CLIENT_SECRET=${{ secrets.AURINKO_CLIENT_SECRET }}" \
             --quiet
 
       - name: Deploy Worker
@@ -106,5 +103,4 @@ jobs:
             --args app.worker_settings.WorkerSettings \
             --min-instances 0 \
             --env-vars-file backend/cloudrun.env.yaml \
-            --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }},BACKEND_URL=${{ secrets.BACKEND_URL }},DEBUG=false" \
             --quiet

@@ -60,14 +60,14 @@ jobs:
           gcloud run jobs update migrate \
             --image "$IMAGE" \
             --region "$REGION" \
-            --command bash \
-            --args -lc,alembic\ -c\ alembic.ini\ upgrade\ head \
+            --command /opt/venv/bin/alembic \
+            --args -c,/app/alembic.ini,upgrade,head \
             --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}" \
           || gcloud run jobs create migrate \
             --image "$IMAGE" \
             --region "$REGION" \
-            --command bash \
-            --args -lc,alembic\ -c\ alembic.ini\ upgrade\ head \
+            --command /opt/venv/bin/alembic \
+            --args -c,/app/alembic.ini,upgrade,head \
             --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}"
 
       - name: Run migrations

@@ -19,6 +19,7 @@ env:
   SERVICE_API: ${{ secrets.CLOUD_RUN_SERVICE_NAME_API }} # e.g. mailmind-api
   SERVICE_WORKER: ${{ secrets.CLOUD_RUN_SERVICE_NAME_WORKER }} # e.g. mailmind-worker
   IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPOSITORY }}/mailmind:${{ github.sha }}
+  CLOUD_RUN_ENV_YAML: ${{ secrets.CLOUD_RUN_ENV_YAML }}
 
 jobs:
   build-and-deploy:
@@ -29,6 +30,7 @@ jobs:
       REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
       SERVICE_API: ${{ secrets.CLOUD_RUN_SERVICE_NAME_API }}
       SERVICE_WORKER: ${{ secrets.CLOUD_RUN_SERVICE_NAME_WORKER }}
+      CLOUD_RUN_ENV_YAML: ${{ secrets.CLOUD_RUN_ENV_YAML }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,20 +56,29 @@ jobs:
       - name: Push image
         run: docker push "$IMAGE"
 
+      - name: Write Cloud Run env file
+        run: |
+          mkdir -p backend
+          cat > backend/cloudrun.env.yaml << 'EOF'
+          ${{ env.CLOUD_RUN_ENV_YAML }}
+          EOF
+
       - name: Create/Update migration job
         run: |
           gcloud run jobs describe migrate --region "$REGION" >/dev/null 2>&1 && \
           gcloud run jobs update migrate \
             --image "$IMAGE" \
             --region "$REGION" \
-            --command /opt/venv/bin/alembic \
-            --args "-c","/app/alembic.ini","upgrade","head" \
+            --command /opt/venv/bin/python \
+            --args=-m,alembic,-c,/app/alembic.ini,upgrade,head \
+            --env-vars-file backend/cloudrun.env.yaml \
             --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}" \
           || gcloud run jobs create migrate \
             --image "$IMAGE" \
             --region "$REGION" \
-            --command /opt/venv/bin/alembic \
-            --args "-c","/app/alembic.ini","upgrade","head" \
+            --command /opt/venv/bin/python \
+            --args=-m,alembic,-c,/app/alembic.ini,upgrade,head \
+            --env-vars-file backend/cloudrun.env.yaml \
             --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}"
 
       - name: Run migrations
@@ -81,7 +92,8 @@ jobs:
             --region "$REGION" \
             --allow-unauthenticated \
             --port 8000 \
-            --set-env-vars "FRONTEND_URL=${{ secrets.FRONTEND_URL }},BACKEND_URL=${{ secrets.BACKEND_URL }},DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }},ACCESS_TOKEN_EXPIRE_MINUTES=60,DEBUG=false" \
+            --env-vars-file backend/cloudrun.env.yaml \
+            --set-env-vars "FRONTEND_URL=${{ secrets.FRONTEND_URL }},BACKEND_URL=${{ secrets.BACKEND_URL }},DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }},ACCESS_TOKEN_EXPIRE_MINUTES=60,DEBUG=false,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},AURINKO_SIGNING_SECRET=${{ secrets.AURINKO_SIGNING_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }},AURINKO_CLIENT_ID=${{ secrets.AURINKO_CLIENT_ID }},AURINKO_CLIENT_SECRET=${{ secrets.AURINKO_CLIENT_SECRET }}" \
             --quiet
 
       - name: Deploy Worker
@@ -93,5 +105,6 @@ jobs:
             --command arq \
             --args app.worker_settings.WorkerSettings \
             --min-instances 0 \
+            --env-vars-file backend/cloudrun.env.yaml \
             --set-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }},BACKEND_URL=${{ secrets.BACKEND_URL }},DEBUG=false" \
             --quiet

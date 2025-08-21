@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import { Thread } from '@/types';
+import { getApiBaseUrl } from "@/lib/env";
 
 const fetcher = (url: string) =>
   fetch(url, {
@@ -38,7 +39,7 @@ export function usePaginatedThreads(): UsePaginatedThreadsResult {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingRef = useRef(false);
 
-  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+  const base = getApiBaseUrl();
   // Fetch data for the current page
   const params = new URLSearchParams({
     page: currentPage.toString(),

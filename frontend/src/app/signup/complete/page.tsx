@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import { getApiBaseUrl } from "@/lib/env";
 import Link from "next/link";
 import { Mail } from "lucide-react";
 import {
@@ -20,8 +21,7 @@ export default function SignupCompletePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const backend =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const backend = getApiBaseUrl();
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

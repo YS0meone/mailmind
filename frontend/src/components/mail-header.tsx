@@ -11,6 +11,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ComposeDialog } from "@/components/compose-dialog";
 import { Moon, Sun, Monitor, Plus, Settings, LogOut } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/env";
 
 interface MailHeaderProps {
   isCollapsed: boolean;
@@ -142,7 +143,7 @@ export function MailHeader({
               onClick={async () => {
                 try {
                   const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/logout`,
+                    `${getApiBaseUrl()}/auth/logout`,
                     {
                       method: "POST",
                       credentials: "include",
@@ -191,7 +192,7 @@ export function MailHeader({
               onClick={async () => {
                 try {
                   const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/logout`,
+                    `${getApiBaseUrl()}/auth/logout`,
                     {
                       method: "POST",
                       credentials: "include",

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { Mail } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/env";
 
 export default async function LoginPage() {
   const cookieStore = await cookies();
@@ -9,8 +10,7 @@ export default async function LoginPage() {
   if (token) {
     // verify token server-side with a lightweight call to backend /auth/me
     try {
-      const api =
-        process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+      const api = getApiBaseUrl();
       const res = await fetch(`${api}/auth/me`, {
         headers: { Cookie: `access_token=${token}` },
         cache: "no-store",

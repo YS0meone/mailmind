@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import Link from "next/link";
+import { getApiBaseUrl } from "@/lib/env";
 import { Mail } from "lucide-react";
 import {
   Card,
@@ -15,8 +16,7 @@ export default function SignupPage() {
   const handleGoogleSignup = () => {
     const baseUrl = "https://api.aurinko.io/v1/auth/authorize";
     const appClientId = process.env.NEXT_PUBLIC_AURINKO_CLIENT_ID || "";
-    const backend =
-      process.env.NEXT_PUBLIC_API_BASE_URL;
+    const backend = getApiBaseUrl();
     console.log(baseUrl, appClientId, backend);
     const params = new URLSearchParams({
       clientId: appClientId,
@@ -84,10 +84,8 @@ export default function SignupPage() {
                   </Link>
                 </div>
               </div>
-              
             </CardContent>
           </Card>
-
         </div>
       </div>
     </main>

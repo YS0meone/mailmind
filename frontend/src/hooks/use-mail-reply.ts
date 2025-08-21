@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ReplyEmail } from "@/types";
+import { getApiBaseUrl } from "@/lib/env";
 
 interface UseMailReplyProps {
   sendReply: (messageID: string, replyData: ReplyEmail) => Promise<void>;
@@ -15,8 +16,7 @@ export function useMailReply(): UseMailReplyProps {
     setError(null);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-      const url = `${baseUrl}/mail/thread/${messageID}/reply`;
+      const url = `${getApiBaseUrl()}/mail/thread/${messageID}/reply`;
       const response = await fetch(url, {
         method: "POST",
         credentials: "include",

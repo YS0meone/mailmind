@@ -30,6 +30,7 @@ import { Chat } from "@/components/chat";
 import { MailHeader } from "@/components/mail-header";
 import { DbEmail, Thread } from "@/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { getApiBaseUrl } from "@/lib/env";
 
 interface MailProps {
   defaultLayout: number[] | undefined;
@@ -96,9 +97,7 @@ export function MailPage({
       try {
         // Fetch the specific thread by threadId
         const response = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-          }/mail/thread/${threadId}`,
+          `${getApiBaseUrl()}/mail/thread/${threadId}`,
           {
             credentials: "include",
             headers: {

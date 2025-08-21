@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getApiBaseUrl } from "@/lib/env";
 
 export default function SyncLoadingPage() {
   const [state, setState] = useState<{
@@ -17,8 +18,7 @@ export default function SyncLoadingPage() {
     error?: string;
   }>({ state: "running" });
 
-  const backend =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const backend = getApiBaseUrl();
 
   useEffect(() => {
     let cancelled = false;

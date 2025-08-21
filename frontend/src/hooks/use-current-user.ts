@@ -1,4 +1,5 @@
 import useSWR from 'swr';
+import { getApiBaseUrl } from "@/lib/env";
 
 interface User {
   email: string;
@@ -21,7 +22,7 @@ const fetcher = (url: string) =>
 
 export function useCurrentUser() {
   const { data, error, isLoading } = useSWR<User>(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/auth/me`,
+    `${getApiBaseUrl()}/auth/me`,
     fetcher,
     {
       revalidateOnFocus: false,

@@ -1,6 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { getApiBaseUrl } from "@/lib/env";
 import React, { useState } from "react";
 import {
   Card,
@@ -28,9 +29,7 @@ export function LoginForm({
     setError(null);
     setLoading(true);
     try {
-      const loginUrl = `${
-        process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
-      }/auth/login`;
+      const loginUrl = `${getApiBaseUrl()}/auth/login`;
       const resp = await fetch(loginUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

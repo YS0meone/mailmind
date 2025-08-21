@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { MailPage } from "@/components/mail";
+import { getApiBaseUrl } from "@/lib/env";
 
 export default async function InboxPage() {
   // Basic auth guard: require access_token cookie
@@ -11,7 +12,7 @@ export default async function InboxPage() {
     redirect("/login");
   }
   // Double-check token by calling backend; if invalid/expired, redirect to login
-  const api = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const api = getApiBaseUrl();
   try {
     const res = await fetch(`${api}/auth/me`, {
       headers: { Cookie: `access_token=${token}` },

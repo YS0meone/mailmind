@@ -16,6 +16,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getApiBaseUrl } from "@/lib/env";
 
 interface EmailSource {
   email_id: string;
@@ -63,17 +64,12 @@ export function Chat({ onEmailSelect }: ChatProps) {
 
   const checkChatStatus = useCallback(async () => {
     try {
-      const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-        }/chat/status`,
-        {
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await fetch(`${getApiBaseUrl()}/chat/status`, {
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
       if (response.ok) {
         const status = await response.json();
@@ -81,28 +77,18 @@ export function Chat({ onEmailSelect }: ChatProps) {
 
         if (status.indexed_emails === 0) {
           // Try to index emails directly here to avoid cyclic deps
-          await fetch(
-            `${
-              process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-            }/chat/index`,
-            {
-              method: "POST",
-              credentials: "include",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          );
+          await fetch(`${getApiBaseUrl()}/chat/index`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
           // Then refresh status
-          const refreshed = await fetch(
-            `${
-              process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-            }/chat/status`,
-            {
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-            }
-          );
+          const refreshed = await fetch(`${getApiBaseUrl()}/chat/status`, {
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+          });
           if (refreshed.ok) setChatStatus(await refreshed.json());
         }
       }
@@ -116,7 +102,6 @@ export function Chat({ onEmailSelect }: ChatProps) {
     // Check chat status on component mount
     checkChatStatus();
   }, [checkChatStatus]);
-
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -134,9 +119,7 @@ export function Chat({ onEmailSelect }: ChatProps) {
     setError(null);
 
     try {
-      const base = (
-        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-      ).replace(/\/$/, "");
+      const base = getApiBaseUrl();
       const resp = await fetch(`${base}/chat/stream`, {
         method: "POST",
         credentials: "include",

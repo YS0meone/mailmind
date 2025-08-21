@@ -16,7 +16,7 @@ export default function SignupPage() {
     const baseUrl = "https://api.aurinko.io/v1/auth/authorize";
     const appClientId = process.env.NEXT_PUBLIC_AURINKO_CLIENT_ID || "";
     const backend =
-      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+      process.env.NEXT_PUBLIC_API_BASE_URL;
     const params = new URLSearchParams({
       clientId: appClientId,
       serviceType: "Google",

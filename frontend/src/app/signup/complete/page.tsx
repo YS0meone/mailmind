@@ -39,6 +39,7 @@ export default function SignupCompletePage() {
       return;
     }
     setLoading(true);
+    console.log(backend);
     try {
       const resp = await fetch(`${backend}/auth/signup/complete`, {
         method: "POST",

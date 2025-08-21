@@ -92,14 +92,27 @@ jobs:
             --env-vars-file backend/cloudrun.env.yaml \
             --quiet
 
-      - name: Deploy Worker
+      - name: Prepare worker env file (.env format)
         run: |
-          gcloud run deploy "$SERVICE_WORKER" \
-            --image "$IMAGE" \
-            --platform managed \
-            --region "$REGION" \
-            --command arq \
-            --args app.worker_settings.WorkerSettings \
-            --min-instances 0 \
-            --env-vars-file backend/cloudrun.env.yaml \
-            --quiet
+          awk -F': *' '/^[A-Z0-9_]+:/ {val=$2; gsub(/^"|"$/,"",val); print $1"="val}' backend/cloudrun.env.yaml > backend/worker.env
+
+      - name: Deploy/Update ARQ worker on Compute Engine
+        env:
+          GCE_ZONE: ${{ secrets.GCE_ZONE }}
+          GCE_WORKER_INSTANCE: ${{ secrets.GCE_WORKER_INSTANCE }}
+        run: |
+          if gcloud compute instances describe "$GCE_WORKER_INSTANCE" --zone "$GCE_ZONE" >/dev/null 2>&1; then
+            gcloud compute instances update-container "$GCE_WORKER_INSTANCE" \
+              --zone "$GCE_ZONE" \
+              --container-image "$IMAGE" \
+              --container-command /opt/venv/bin/arq \
+              --container-arg app.worker_settings.WorkerSettings \
+              --container-env-file backend/worker.env
+          else
+            gcloud compute instances create-with-container "$GCE_WORKER_INSTANCE" \
+              --zone "$GCE_ZONE" \
+              --container-image "$IMAGE" \
+              --container-command /opt/venv/bin/arq \
+              --container-arg app.worker_settings.WorkerSettings \
+              --container-env-file backend/worker.env
+          fi

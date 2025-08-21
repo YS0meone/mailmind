@@ -1,5 +1,6 @@
 from logging.config import fileConfig
 import os
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -19,6 +20,20 @@ if _env_db_url:
     if _env_db_url.startswith("postgresql+asyncpg://"):
         _env_db_url = _env_db_url.replace(
             "postgresql+asyncpg://", "postgresql://", 1)
+
+    # Normalize providers that use "ssl=require" to psycopg2's "sslmode=require"
+    try:
+        parts = urlsplit(_env_db_url)
+        qs = dict(parse_qsl(parts.query))
+        if "ssl" in qs and "sslmode" not in qs:
+            val = (qs.pop("ssl") or "").lower()
+            qs["sslmode"] = "require" if val in (
+                "true", "1", "require", "required") else val
+        _env_db_url = urlunsplit(parts._replace(query=urlencode(qs)))
+    except Exception:
+        # If parsing fails, fall back to the original URL
+        pass
+
     config.set_main_option("sqlalchemy.url", _env_db_url)
 
 # Interpret the config file for Python logging.

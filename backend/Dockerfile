@@ -54,6 +54,6 @@ USER appuser
 
 
 # Default command uses uvicorn (gunicorn not necessary on Cloud Run)
-CMD ["sh","-lc","uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh","-c","/opt/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
 
 

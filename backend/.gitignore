@@ -111,3 +111,5 @@ venv.bak/
 .idea/*
 
 chroma_langchain_db/
+
+cloudrun.env.yaml

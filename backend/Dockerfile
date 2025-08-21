@@ -31,8 +31,7 @@ FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:$PATH" \
-    PORT=8000
+    PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 

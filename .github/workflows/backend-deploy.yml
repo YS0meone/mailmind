@@ -92,27 +92,14 @@ jobs:
             --env-vars-file backend/cloudrun.env.yaml \
             --quiet
 
-      - name: Prepare worker env file (.env format)
+      - name: Deploy Worker
         run: |
-          awk -F': *' '/^[A-Z0-9_]+:/ {val=$2; gsub(/^"|"$/,"",val); print $1"="val}' backend/cloudrun.env.yaml > backend/worker.env
-
-      - name: Deploy/Update ARQ worker on Compute Engine
-        env:
-          GCE_ZONE: ${{ secrets.GCE_ZONE }}
-          GCE_WORKER_INSTANCE: ${{ secrets.GCE_WORKER_INSTANCE }}
-        run: |
-          if gcloud compute instances describe "$GCE_WORKER_INSTANCE" --zone "$GCE_ZONE" >/dev/null 2>&1; then
-            gcloud compute instances update-container "$GCE_WORKER_INSTANCE" \
-              --zone "$GCE_ZONE" \
-              --container-image "$IMAGE" \
-              --container-command /opt/venv/bin/arq \
-              --container-arg app.worker_settings.WorkerSettings \
-              --container-env-file backend/worker.env
-          else
-            gcloud compute instances create-with-container "$GCE_WORKER_INSTANCE" \
-              --zone "$GCE_ZONE" \
-              --container-image "$IMAGE" \
-              --container-command /opt/venv/bin/arq \
-              --container-arg app.worker_settings.WorkerSettings \
-              --container-env-file backend/worker.env
-          fi
+          gcloud run deploy "$SERVICE_WORKER" \
+            --image "$IMAGE" \
+            --platform managed \
+            --region "$REGION" \
+            --command sh \
+            --args=-c,"/opt/venv/bin/arq app.worker_settings.WorkerSettings & /opt/venv/bin/python -c 'import os,uvicorn; from fastapi import FastAPI; app=FastAPI(); app.add_api_route("/healthz", lambda: {"status":"ok"}); uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT",8080)))'" \
+            --min-instances 0 \
+            --env-vars-file backend/cloudrun.env.yaml \
+            --quiet

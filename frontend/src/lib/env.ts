@@ -1,3 +1,3 @@
 export function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "none";
+  return "https://mailmind-api-135664793611.us-central1.run.app";
 }

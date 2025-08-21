@@ -17,6 +17,7 @@ export default function SignupPage() {
     const appClientId = process.env.NEXT_PUBLIC_AURINKO_CLIENT_ID || "";
     const backend =
       process.env.NEXT_PUBLIC_API_BASE_URL;
+    console.log(baseUrl, appClientId, backend);
     const params = new URLSearchParams({
       clientId: appClientId,
       serviceType: "Google",

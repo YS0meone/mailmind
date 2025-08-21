@@ -99,7 +99,7 @@ jobs:
             --platform managed \
             --region "$REGION" \
             --command sh \
-            --args=-c,"/opt/venv/bin/arq app.worker_settings.WorkerSettings & /opt/venv/bin/python -c 'import os,uvicorn; from fastapi import FastAPI; app=FastAPI(); app.add_api_route("/healthz", lambda: {"status":"ok"}); uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT",8080)))'" \
+            --args=-c,"/opt/venv/bin/arq app.worker_settings.WorkerSettings & /opt/venv/bin/uvicorn app.worker_health:app --host 0.0.0.0 --port ${PORT:-8080}" \
             --min-instances 0 \
             --env-vars-file backend/cloudrun.env.yaml \
             --quiet

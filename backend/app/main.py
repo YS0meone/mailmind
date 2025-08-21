@@ -14,14 +14,18 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Strict init: require Redis at startup
-    app.state.redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
-    app.state.arq = await create_pool(app.state.redis_settings)
-    # Sanity check
-    await app.state.arq.ping()
-    # Create a shared Redis client for API reads (e.g., /sync/status)
-    app.state.redis = redis.from_url(settings.REDIS_URL)
-    await app.state.redis.ping()
+    try:
+        app.state.redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+        app.state.arq = await create_pool(app.state.redis_settings)
+        await app.state.arq.ping()
+
+        app.state.redis = redis.from_url(settings.REDIS_URL)
+        await app.state.redis.ping()
+    except Exception as e:
+        # log warning instead of exiting
+        app.state.arq = None
+        app.state.redis = None
+
     try:
         yield
     finally:

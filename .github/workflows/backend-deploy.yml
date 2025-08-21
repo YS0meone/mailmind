@@ -89,7 +89,6 @@ jobs:
             --platform managed \
             --region "$REGION" \
             --allow-unauthenticated \
-            --port 8000 \
             --env-vars-file backend/cloudrun.env.yaml \
             --quiet
 

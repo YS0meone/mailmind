@@ -1,170 +1,136 @@
-# MailMind 
+# MailMind
 
-## Overview:
-A powerful AI-powered email management system that combines intelligent email organization with conversational AI capabilities. MailMind helps you manage your emails more efficiently by providing smart categorization, search, and chat-based interactions with your email data.
+## Overview
 
-## UI Demo:
-### Light Mode:
+MailMind is an AI-powered email client that combines intelligent email organization with a conversational assistant. It lets you triage faster, ask natural-language questions over your mailbox (RAG), and draft/send emails with AI assistance.
+
+## UI Demo
+
+### Light Mode
+
 ![image](public/light_mode.png)
-### Dark Mode:
-![image](public/dark_mode.png)
-### Chatbot:
-![image](public/chatbot.png)
 
+### Dark Mode
+
+![image](public/dark_mode.png)
+
+### Chatbot
+
+![image](public/chatbot.png)
 
 ## 🌟 Features
 
-- **Smart Email Management**: Organize emails with intelligent categorization and filtering
-- **AI-Powered Chat**: Ask questions about your emails and get intelligent responses
-- **Real-time Synchronization**: Seamless email sync with popular email providers via Aurinko
-- **Modern UI**: Clean, responsive interface built with Next.js and shadcn/ui
-- **Virtual Scrolling**: Efficient handling of large email lists
-- **Advanced Search**: Powerful search capabilities across your email data
-- **RAG (Retrieval-Augmented Generation)**: AI-powered email content analysis and responses
+- **Smart email management**: Inbox, threads, search, and compose/reply flows
+- **AI-powered chat (RAG)**: Ask questions and get citation-backed answers
+- **Real-time sync**: Incremental sync via Aurinko; background workers keep data fresh
+- **Modern UI**: Next.js App Router, shadcn/Radix UI, Tailwind CSS, streaming chat
 
 ## 🏗️ Tech Stack
 
 ### Frontend
 
-- **Framework**: Next.js 15 with TypeScript
-- **UI Components**: shadcn/ui with Radix UI primitives
-- **Styling**: Tailwind CSS 4
-- **State Management**: Jotai, SWR for data fetching
-- **Virtual Scrolling**: React Window for performance optimization
-- **Form Handling**: React Hook Form with Zod validation
-- **Icons**: Lucide React
-
-
-
+- **Framework**: Next.js 15 with TypeScript (App Router)
+- **UI**: shadcn/ui + Radix UI primitives
+- **Styling**: Tailwind CSS
+- **Data fetching**: SWR
+- **Deployment**: Vercel
 
 ### Backend
 
 - **Framework**: FastAPI (Python)
-- **Database**: PostgreSQL (Neon)
-- **ORM**: SQLAlchemy 2.0 with async support
-- **Authentication**: JWT with python-jose
+- **Database**: PostgreSQL (e.g., Neon)
+- **ORM**: SQLAlchemy 2.0 + Alembic
+- **Auth**: Cookie-based auth (JWT token in cookie), CORS configured for Vercel
+- **Workers/Queue**: ARQ + Redis for background sync/indexing
+- **AI/RAG**: LangChain/LangGraph + Chroma vector store
 - **Email Integration**: Aurinko API
-- **AI/ML**: OpenAI GPT integration for RAG service
-- **Database Migrations**: Alembic
-- **CORS**: FastAPI CORS middleware
+- **Deployment**: Cloud Run
 
-### Development Tools
+### Tooling
 
-- **Package Manager**: pnpm (frontend), pip (backend)
-- **Code Quality**: ESLint, TypeScript
-- **Database**: PostgreSQL with async SQLAlchemy
-- **Environment**: Python dotenv for configuration
+- **Package manager**: npm (frontend), pip (backend)
+- **Code quality**: ESLint, TypeScript
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- **Node.js** 18+ and **pnpm**
+- **Node.js** 18+
 - **Python** 3.10+
 - **PostgreSQL** database (or Neon account)
+- **Redis** (for ARQ workers)
 - **Aurinko API** credentials
 - **OpenAI API** key (optional, for AI features)
 
 ### Backend Setup
 
-1. **Navigate to the backend directory**:
+1. Navigate to backend and create venv
 
    ```bash
    cd backend
-   ```
-
-2. **Create a virtual environment**:
-
-   ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   # Windows
+   venv\Scripts\activate
+   # macOS/Linux
+   # source venv/bin/activate
    ```
 
-3. **Install dependencies**:
+2. Install dependencies
 
    ```bash
    pip install -r requirement.txt
    ```
 
-4. **Environment Configuration**:
-   Create a `.env` file in the project root with:
+3. Environment configuration
+   
+   Create a new `.env` file based on the `.env.example` file.
 
-   ```env
-   # System
-   DEBUG=False
-
-   # Aurinko Email API
-   AURINKO_CLIENT_ID=your_aurinko_client_id
-   AURINKO_CLIENT_SECRET=your_aurinko_client_secret
-   AURINKO_BASE_URL=https://api.aurinko.io
-   AURINKO_SYNC_DAYS_WITHIN=3
-
-   # Application URLs
-   FRONTEND_URL=http://localhost:3000
-   BACKEND_URL=http://localhost:8000
-
-   # Database
-   DATABASE_URL=postgresql://username:password@host:port/database
-   DATABASE_POOL_SIZE=10
-   DATABASE_POOL_TIMEOUT=30
-   DATABASE_MAX_OVERFLOW=20
-
-   # AI (Optional)
-   OPENAI_API_KEY=your_openai_api_key
-   OPENAI_MODEL=gpt-3.5-turbo
-
-   # Security
-   SECRET_KEY=your_secret_key_here
-   ALGORITHM=HS256
-   ACCESS_TOKEN_EXPIRE_MINUTES=30
-   ```
-
-5. **Initialize the database**:
+4. Migrations and init
 
    ```bash
-   # Run migrations
    alembic upgrade head
-
-   # Initialize database (if needed)
-   python -m app.init_db
+   # optional
+   # python -m app.init_db
    ```
 
-6. **Start the backend server**:
+5. Start API (dev)
+
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
 ### Frontend Setup
 
-1. **Navigate to the frontend directory**:
+1. Navigate to frontend
 
    ```bash
    cd frontend
    ```
 
-2. **Install dependencies**:
+2. Install dependencies
 
    ```bash
-   pnpm install
+   npm install
    ```
 
-3. **Environment Configuration**:
-   Create a `.env.local` file:
+3. Environment configuration
 
    ```env
-   NEXT_PUBLIC_API_URL=http://localhost:8000
+   NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+   NEXT_PUBLIC_AURINKO_CLIENT_ID=your_aurinko_client_id
    ```
 
-4. **Start the development server**:
+4. Start dev server
+
    ```bash
-   pnpm dev
+   npm run dev
    ```
 
 The application will be available at:
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
+- **API docs**: http://localhost:8000/docs
 
 ## 📁 Project Structure
 
@@ -174,73 +140,50 @@ mailmind/
 │   ├── app/
 │   │   ├── api/               # API routes
 │   │   │   └── routes/        # Route handlers
-│   │   ├── core/              # Core configurations
+│   │   ├── core/              # Config
 │   │   ├── services/          # Business logic (RAG, etc.)
 │   │   ├── models.py          # SQLAlchemy models
-│   │   ├── crud.py            # Database operations
+│   │   ├── crud.py            # DB operations
 │   │   └── main.py            # FastAPI app
-│   ├── alembic/               # Database migrations
-│   └── requirement.txt        # Python dependencies
+│   ├── alembic/               # DB migrations
+│   └── requirement.txt        # Python deps
 ├── frontend/                   # Next.js frontend
 │   ├── src/
-│   │   ├── app/               # Next.js app router
-│   │   ├── components/        # React components
-│   │   ├── hooks/             # Custom React hooks
-│   │   └── lib/               # Utility functions
-│   └── package.json           # Node.js dependencies
+│   │   ├── app/               # App Router
+│   │   ├── components/        # UI components
+│   │   ├── hooks/             # React hooks
+│   │   └── lib/               # Utilities
+│   └── package.json           # Node deps
 └── public/                    # Static assets
 ```
 
 ## 🔧 API Documentation
 
-Once the backend is running, visit http://localhost:8000/docs for interactive API documentation powered by FastAPI's automatic OpenAPI generation.
+Visit http://localhost:8000/docs for the FastAPI OpenAPI UI.
 
-### Key Endpoints
+### Key Endpoints (high level)
 
-- `POST /api/auth/login` - User authentication
-- `GET /api/mail/threads` - Fetch email threads
-- `POST /api/chat/ask` - AI chat interface
-- `GET /api/mail/sync` - Sync emails from provider
+- `POST /auth/login` – User authentication
+- `GET /mail/threads` – Fetch paginated threads
+- `POST /chat/stream` – Streaming chat over emails (RAG)
+- `POST /mail/thread/{id}/reply` – Send a reply
 
 ## 🤖 AI Features
 
-MailMind includes a RAG (Retrieval-Augmented Generation) service that allows you to:
-
-- Ask questions about your emails
-- Get summaries of conversations
-- Find specific information across your email history
-- Generate smart replies based on context
+MailMind includes a RAG service for question answering, summarization, and semantic retrieval over your email history. Answers include citations back to source messages.
 
 ## 🔒 Security
 
-- JWT-based authentication
-- CORS protection
-- SQL injection prevention through SQLAlchemy ORM
-- Environment-based configuration management
+- Cookie-based auth (JWT), CORS restricted to your frontend
+- Environment-based configuration
 
 ## 🧪 Development
 
-### Running Tests
-
-Backend:
-
-```bash
-cd backend
-pytest
-```
-
-### Database Migrations
-
-Create a new migration:
+### Migrations
 
 ```bash
 cd backend
 alembic revision --autogenerate -m "Description of changes"
-```
-
-Apply migrations:
-
-```bash
 alembic upgrade head
 ```
 
@@ -255,10 +198,6 @@ This project is licensed under the terms specified in the LICENSE file.
 3. Make your changes
 4. Add tests if applicable
 5. Submit a pull request
-
-## 📞 Support
-
-For support or questions about MailMind, please open an issue on the GitHub repository.
 
 ---
 

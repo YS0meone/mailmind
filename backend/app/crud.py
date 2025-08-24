@@ -220,25 +220,27 @@ async def sync_emails_and_threads(session: AsyncSession, records: list[dict], us
     logger.info(f"Starting sync of {len(records)} email records...")
 
     processed_count = 0
-    for record in records:
-        try:
-            if "body" in record.get("omitted", {}):
-                limits = httpx.Limits(
-                    max_connections=settings.HTTP_MAX_CONNECTIONS,
-                    max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS,
-                )
-                timeout = httpx.Timeout(
-                    connect=settings.HTTP_CONNECT_TIMEOUT,
-                    read=settings.HTTP_READ_TIMEOUT,
-                    write=settings.HTTP_WRITE_TIMEOUT,
-                    pool=settings.HTTP_POOL_TIMEOUT,
-                )
-                attempts = settings.HTTP_RETRY_ATTEMPTS
-                base = settings.HTTP_RETRY_BACKOFF_BASE
-                cap = settings.HTTP_RETRY_BACKOFF_CAP
-                jitter = settings.HTTP_RETRY_JITTER
-                retry_status = set(settings.HTTP_RETRY_STATUS_CODES)
-                async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
+    # Build HTTP config once and reuse a single AsyncClient across records to leverage connection pooling
+    limits = httpx.Limits(
+        max_connections=settings.HTTP_MAX_CONNECTIONS,
+        max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+    )
+    timeout = httpx.Timeout(
+        connect=settings.HTTP_CONNECT_TIMEOUT,
+        read=settings.HTTP_READ_TIMEOUT,
+        write=settings.HTTP_WRITE_TIMEOUT,
+        pool=settings.HTTP_POOL_TIMEOUT,
+    )
+    attempts = settings.HTTP_RETRY_ATTEMPTS
+    base = settings.HTTP_RETRY_BACKOFF_BASE
+    cap = settings.HTTP_RETRY_BACKOFF_CAP
+    jitter = settings.HTTP_RETRY_JITTER
+    retry_status = set(settings.HTTP_RETRY_STATUS_CODES)
+
+    async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
+        for record in records:
+            try:
+                if "body" in record.get("omitted", {}):
                     last_exc = None
                     for attempt in range(attempts):
                         try:
@@ -259,24 +261,24 @@ async def sync_emails_and_threads(session: AsyncSession, records: list[dict], us
                                 raise
                             sleep_s = min(cap, base * (2 ** attempt)) + jitter
                             await asyncio.sleep(sleep_s)
-                if response.status_code == 200:
-                    record["body"] = response.json().get("body", None)
-                    logger.info(f"Fetched body for email {record['id']}")
-                else:
-                    logger.error(
-                        f"Failed to fetch body for email {record['id']}: {response.text}")
-                    continue
-            await upsert_record(session, record, body=record.get("body"))
-            processed_count += 1
-        except Exception as e:
-            # Roll back this failed record so the session can proceed
-            try:
-                await session.rollback()
-            except Exception:
-                pass
-            logger.error(
-                f"Failed to process record {record.get('id', 'unknown')}: {e}")
-            continue
+                    if response.status_code == 200:
+                        record["body"] = response.json().get("body", None)
+                        logger.info(f"Fetched body for email {record['id']}")
+                    else:
+                        logger.error(
+                            f"Failed to fetch body for email {record['id']}: {response.text}")
+                        continue
+                await upsert_record(session, record, body=record.get("body"))
+                processed_count += 1
+            except Exception as e:
+                # Roll back this failed record so the session can proceed
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+                logger.error(
+                    f"Failed to process record {record.get('id', 'unknown')}: {e}")
+                continue
 
     # Commit all changes at the end
     await session.commit()

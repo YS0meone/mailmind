@@ -98,7 +98,8 @@ async def sync_emails_task(ctx, user_email: str):
             )
             # Remove from DB
             if deleted_ids:
-                logger.info("Deleting %d emails for %s", len(deleted_ids), db_user.email)
+                logger.info("Deleting %d emails for %s",
+                            len(deleted_ids), db_user.email)
                 await delete_emails_by_ids(session, deleted_ids)
             # Persist deleted token
             db_user.lastDeletedDeltaToken = last_deleted_token
@@ -152,7 +153,8 @@ async def sync_emails_task(ctx, user_email: str):
                             docs_split), db_user.email
                     )
                     await store.aadd_documents(documents=docs_split)
-                    logger.info("Added %d docs to vector store", len(docs_split))
+                    logger.info("Added %d docs to vector store",
+                                len(docs_split))
 
                     # if docs:
                     #     await asyncio.to_thread(store.add_documents, docs)
@@ -195,7 +197,8 @@ async def sync_emails_task(ctx, user_email: str):
 
 
 async def startup(ctx):
-    logger.info("ARQ worker startup: functions=%s", [f.__name__ for f in WorkerSettings.functions])
+    logger.info("ARQ worker startup: functions=%s", [
+                f.__name__ for f in WorkerSettings.functions])
     try:
         await ctx["redis"].ping()
         logger.info("Redis ping ok")
@@ -208,3 +211,6 @@ class WorkerSettings:
     on_startup = startup
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     cron_jobs = []
+    # Increase how long the worker waits between polling Redis for new jobs to reduce idle CPU usage.
+    # Read from optional env var ARQ_POLL_DELAY_SECONDS; default to 5 seconds if not provided.
+    poll_delay = float(getattr(settings, "ARQ_POLL_DELAY_SECONDS", 5.0))

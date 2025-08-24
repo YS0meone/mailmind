@@ -37,7 +37,7 @@ export default function SyncLoadingPage() {
       } catch {
         // ignore transient errors, will retry
       } finally {
-        if (!cancelled) setTimeout(poll, 2000);
+        if (!cancelled) setTimeout(poll, 20000);
       }
     };
     poll();

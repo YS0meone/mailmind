@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from sqlalchemy import select
 from app.models import DbUser, User
-from app.logger_config import get_logger
+from app.logger_config import get_logger, setup_logging
 from app.crud import sync_emails_and_threads, delete_emails_by_ids
 from app.api.routes.auth import init_sync_emails, increment_sync_updated, increment_sync_deleted
 from datetime import datetime, timezone
@@ -12,6 +12,8 @@ import asyncio
 from langchain_core.documents import Document
 from app.services.vector_store import get_vector_store
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+setup_logging()
 
 logger = get_logger(__name__)
 
@@ -193,7 +195,12 @@ async def sync_emails_task(ctx, user_email: str):
 
 
 async def startup(ctx):
-    pass
+    logger.info("ARQ worker startup: functions=%s", [f.__name__ for f in WorkerSettings.functions])
+    try:
+        await ctx["redis"].ping()
+        logger.info("Redis ping ok")
+    except Exception as e:
+        logger.exception("Redis ping failed: %s", e)
 
 
 class WorkerSettings:

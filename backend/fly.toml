@@ -1,0 +1,11 @@
+app = "mailmind-worker"
+primary_region = "iad"
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[processes]
+  worker = "/opt/venv/bin/python -u -m arq app.worker_settings.WorkerSettings"
+
+[env]
+  PYTHONUNBUFFERED = "1"
